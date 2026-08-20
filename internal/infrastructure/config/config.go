@@ -6,6 +6,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+/*
+Config holds all environment-derived settings the application needs
+at startup: server port, database location, JWT signing secret, and
+AI provider credentials.
+*/
 type Config struct {
 	AppPort    string
 	DBPath     string
@@ -14,8 +19,14 @@ type Config struct {
 	AIAPIKey   string
 }
 
+/*
+Load reads environment variables into a Config. It attempts to load a
+local .env file first, but does not fail if one is absent — in
+production, environment variables are typically injected directly by
+the deployment platform (Docker, Kubernetes, etc.) instead.
+*/
 func Load() *Config {
-	godotenv.Load()
+	_ = godotenv.Load()
 
 	return &Config{
 		AppPort:    os.Getenv("APP_PORT"),

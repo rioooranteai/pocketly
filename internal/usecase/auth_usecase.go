@@ -11,13 +11,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type AuthUsecase struct {
+type AuthUseCase struct {
 	userRepo repository.UserRepository
 	signer   repository.TokenSigner
 }
 
-func NewAuthUsecase(userRepo repository.UserRepository, signer repository.TokenSigner) *AuthUsecase {
-	return &AuthUsecase{userRepo: userRepo, signer: signer}
+func NewAuthUseCase(userRepo repository.UserRepository, signer repository.TokenSigner) *AuthUseCase {
+	return &AuthUseCase{userRepo: userRepo, signer: signer}
 }
 
 /*
@@ -25,7 +25,7 @@ Register creates a new user account in the system.
 It validates the email format, ensures email uniqueness across the platform,
 and applies bcrypt hashing to the user's password before persistence.
 */
-func (uc *AuthUsecase) Register(ctx context.Context, name, email, password string) (*domain.User, error) {
+func (uc *AuthUseCase) Register(ctx context.Context, name, email, password string) (*domain.User, error) {
 	newUserData := &domain.User{
 		Name:  name,
 		Email: email,
@@ -70,7 +70,7 @@ Login authenticates a user by email and password.
 	To prevent user enumeration, both a non-existent email and a wrong password
 	result in the same domain.ErrInvalidCredentials error.
 */
-func (uc *AuthUsecase) Login(ctx context.Context, email, password string) (string, *domain.User, error) {
+func (uc *AuthUseCase) Login(ctx context.Context, email, password string) (string, *domain.User, error) {
 	userData, err := uc.userRepo.FindByEmail(ctx, email)
 
 	if err != nil {
