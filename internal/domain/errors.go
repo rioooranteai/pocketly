@@ -26,4 +26,6 @@ var (
 		validation.
 	*/
 	ErrInvalidEmail = errors.New("invalid email format")
+
+	ErrTransactionNotFound = errors.New("transaction not found")
 )
