@@ -26,7 +26,7 @@ IsValidEmail reports whether the user's email matches a standard
 email format. This is a format check only — it does not verify that
 the address actually exists or is reachable.
 */
-func (u *User) IsValidEmail() bool {
+func (u User) IsValidEmail() bool {
 	userEmail := strings.TrimSpace(u.Email)
 	if userEmail == "" {
 		return false

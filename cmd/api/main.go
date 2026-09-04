@@ -33,9 +33,9 @@ func main() {
 
 	jwtSigner := auth.NewJWTSigner(cfg.JWTSecret)
 
-	authUsecase := usecase.NewAuthUseCase(userRepository, jwtSigner)
+	AuthUsecase := usecase.NewAuthUsecase(userRepository, jwtSigner)
 
-	authHandler := handler.NewAuthHandler(authUsecase)
+	authHandler := handler.NewAuthHandler(AuthUsecase)
 
 	r := gin.Default()
 

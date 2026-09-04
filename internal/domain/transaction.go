@@ -5,13 +5,14 @@ import (
 )
 
 type Transaction struct {
-	ID           string
-	UserID       string
-	Descriptions string
-	Category     string
-	TotalAmount  float64
-	Items        []TransactionItem
-	CreatedAt    time.Time
+	ID          string
+	UserID      string
+	Description string
+	Category    string
+	TotalAmount float64
+	Items       []TransactionItem
+	Date        time.Time
+	CreatedAt   time.Time
 }
 
 func (t *Transaction) CalculateTotal() {
