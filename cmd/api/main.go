@@ -6,21 +6,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	router "pocketly/internal/delivery/http"
-	"pocketly/internal/delivery/http/handler"
-	"pocketly/internal/infrastructure/ai"
-	"pocketly/internal/infrastructure/auth"
 	"pocketly/internal/infrastructure/config"
 	persistence "pocketly/internal/infrastructure/persistence/gorm"
-	"pocketly/internal/usecase"
 )
 
 /*
-main is the application entry point. It wires every layer together
-in dependency order — configuration, database connection, repository,
-token signer, categorizer, usecase, HTTP handler, and router — then
-starts the HTTP server. This is the only place in the codebase
-allowed to know about every layer at once; every other package
-depends only on the interfaces or types it directly needs.
+main loads configuration, opens the database connection, delegates
+all dependency wiring to Bootstrap, and starts the HTTP server. It
+intentionally contains no construction logic itself — see
+bootstrap.go for that.
 */
 func main() {
 	cfg := config.Load()
@@ -30,25 +24,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	userRepository := persistence.NewGormUserRepository(db)
-
-	jwtSigner := auth.NewJWTSigner(cfg.JWTSecret)
-
-	authUsecase := usecase.NewAuthUsecase(userRepository, jwtSigner)
-
-	authHandler := handler.NewAuthHandler(authUsecase)
-
-	categorizer := ai.NewDummyCategorizer()
-
-	transactionRepository := persistence.NewGormTransactionRepository(db)
-
-	transactionUsecase := usecase.NewTransactionUsecase(transactionRepository, categorizer)
-
-	transactionHandler := handler.NewTransactionHandler(transactionUsecase)
+	app, err := Bootstrap(cfg, db)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	r := gin.Default()
-
-	router.SetupRoutes(r, authHandler, transactionHandler, jwtSigner)
+	router.SetupRoutes(r, app.AuthHandler, app.TransactionHandler, app.JWTSigner)
 
 	if err := r.Run(":" + cfg.AppPort); err != nil {
 		log.Fatal(err)
