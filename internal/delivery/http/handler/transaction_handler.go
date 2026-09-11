@@ -58,8 +58,8 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Sesuai signature Usecase: (ctx, userID, descriptions, items)
-	transaction, err := h.transactionUsecase.CreateTransaction(ctx, userID, req.Description, domainItems)
+	// Sesuai signature Usecase: (ctx, userID, description, items, date)
+	transaction, err := h.transactionUsecase.CreateTransaction(ctx, userID, req.Description, domainItems, req.Date)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction"})
 		return
@@ -87,7 +87,6 @@ func (h *TransactionHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	ctx := c.Request.Context()
 
-	// Sesuai signature Usecase: (ctx, userID, transactionID)
 	transaction, err := h.transactionUsecase.GetTransaction(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, domain.ErrTransactionNotFound) {
@@ -117,19 +116,15 @@ func (h *TransactionHandler) List(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Sesuai nama method di Usecase: ListMyTransaction (singular)
-	transaction, err := h.transactionUsecase.ListMyTransaction(ctx, userID)
+	transactions, err := h.transactionUsecase.ListMyTransactions(ctx, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
 		return
 	}
 
-	// Jika usecase mengembalikan single pointer (*domain.Transaction)
-	var responseData []dto.TransactionResponse
-	if transaction != nil {
-		responseData = append(responseData, toTransactionResponse(transaction))
-	} else {
-		responseData = []dto.TransactionResponse{}
+	responseData := make([]dto.TransactionResponse, 0, len(transactions))
+	for _, t := range transactions {
+		responseData = append(responseData, toTransactionResponse(&t))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -150,6 +145,8 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 		return
 	}
 
+	id := c.Param("id")
+
 	var req dto.CreateTransactionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
@@ -167,8 +164,8 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Sesuai signature Usecase: (ctx, userID, descriptions, items)
-	transaction, err := h.transactionUsecase.UpdateTransaction(ctx, userID, req.Description, domainItems)
+	// Sesuai signature Usecase: (ctx, userID, transactionID, description, items, date)
+	transaction, err := h.transactionUsecase.UpdateTransaction(ctx, userID, id, req.Description, domainItems, req.Date)
 	if err != nil {
 		if errors.Is(err, domain.ErrTransactionNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
@@ -200,7 +197,6 @@ func (h *TransactionHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	ctx := c.Request.Context()
 
-	// Sesuai signature Usecase: (ctx, userID, transactionID)
 	err := h.transactionUsecase.DeleteTransaction(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, domain.ErrTransactionNotFound) {
@@ -221,17 +217,13 @@ func toTransactionResponse(t *domain.Transaction) dto.TransactionResponse {
 		return dto.TransactionResponse{}
 	}
 
-	var itemResponses []dto.TransactionItemResponse
+	itemResponses := make([]dto.TransactionItemResponse, 0, len(t.Items))
 	for _, item := range t.Items {
 		itemResponses = append(itemResponses, dto.TransactionItemResponse{
 			Name:     item.Name,
 			Quantity: item.Quantity,
 			Price:    item.Price,
 		})
-	}
-
-	if itemResponses == nil {
-		itemResponses = []dto.TransactionItemResponse{}
 	}
 
 	return dto.TransactionResponse{
