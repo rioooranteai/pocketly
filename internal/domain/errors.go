@@ -27,5 +27,16 @@ var (
 	*/
 	ErrInvalidEmail = errors.New("invalid email format")
 
+	/*
+		ErrTransactionNotFound is returned when a requested transaction
+		does not exist.
+	*/
 	ErrTransactionNotFound = errors.New("transaction not found")
+
+	/*
+		ErrUnauthorizedAccess is returned when a user attempts to access
+		or modify a resource — such as a transaction — that belongs to
+		a different user.
+	*/
+	ErrUnauthorizedAccess = errors.New("you don't have access to this resource")
 )

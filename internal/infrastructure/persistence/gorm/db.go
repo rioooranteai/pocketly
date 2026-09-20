@@ -21,7 +21,7 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}
 
-	err = db.AutoMigrate(&UserModel{})
+	err = db.AutoMigrate(&UserModel{}, &TransactionModel{}, &TransactionItemModel{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
 	}

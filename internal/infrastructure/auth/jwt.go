@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -41,4 +42,34 @@ func (jw *JWTSigner) Sign(userID string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	return token.SignedString(jw.secret)
+}
+
+/*
+ParseUserID validates the given JWT and extracts the user ID from its
+subject claim. It returns an error if the token is malformed, expired,
+or signed with a different secret.
+*/
+func (jw *JWTSigner) ParseUserID(tokenStr string) (string, error) {
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		return jw.secret, nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if !token.Valid {
+		return "", errors.New("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", errors.New("invalid token claims")
+	}
+
+	userID, ok := claims["sub"].(string)
+	if !ok {
+		return "", errors.New("invalid subject claim")
+	}
+
+	return userID, nil
 }
