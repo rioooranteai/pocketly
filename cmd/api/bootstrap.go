@@ -55,7 +55,8 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 		Business logic for registration and login. Depends only on the
 		two interfaces above, not on their concrete implementations.
 	*/
-	authUsecase := usecase.NewAuthUsecase(userRepository, jwtSigner)
+	hasher := auth.NewArgon2Hasher()
+	authUsecase := usecase.NewAuthUsecase(userRepository, jwtSigner, hasher)
 
 	/*
 		HTTP layer for the /register and /login endpoints.

@@ -4,26 +4,37 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+
 	"pocketly/internal/domain"
 	"pocketly/internal/repository"
-
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
+/*
+AuthUsecase implements the business logic for user registration and
+login. It depends only on interfaces — UserRepository, TokenSigner,
+and PasswordHasher — never on their concrete implementations, so each
+can be swapped independently without touching this file.
+*/
 type AuthUsecase struct {
 	userRepo repository.UserRepository
 	signer   repository.TokenSigner
+	hasher   repository.PasswordHasher
 }
 
-func NewAuthUsecase(userRepo repository.UserRepository, signer repository.TokenSigner) *AuthUsecase {
-	return &AuthUsecase{userRepo: userRepo, signer: signer}
+/*
+NewAuthUsecase builds an AuthUsecase backed by the given repository,
+token signer, and password hasher.
+*/
+func NewAuthUsecase(userRepo repository.UserRepository, signer repository.TokenSigner, hasher repository.PasswordHasher) *AuthUsecase {
+	return &AuthUsecase{userRepo: userRepo, signer: signer, hasher: hasher}
 }
 
 /*
 Register creates a new user account in the system.
-It validates the email format, ensures email uniqueness across the platform,
-and applies bcrypt hashing to the user's password before persistence.
+It validates the email format, ensures email uniqueness across the
+platform, and hashes the user's password via PasswordHasher before
+persistence.
 */
 func (uc *AuthUsecase) Register(ctx context.Context, name, email, password string) (*domain.User, error) {
 	newUserData := &domain.User{
@@ -46,17 +57,13 @@ func (uc *AuthUsecase) Register(ctx context.Context, name, email, password strin
 	newUserData.ID = uuid.New().String()
 	newUserData.CreatedAt = time.Now().UTC()
 
-	// Cost is set to DefaultCost (10). If performance becomes a bottleneck
-	// during traffic spikes, consider offloading this to a background worker.
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := uc.hasher.Hash(password)
 	if err != nil {
 		return nil, err
 	}
+	newUserData.Password = hashedPassword
 
-	newUserData.Password = string(hashedPassword)
-
-	err = uc.userRepo.Create(ctx, newUserData)
-	if err != nil {
+	if err := uc.userRepo.Create(ctx, newUserData); err != nil {
 		return nil, err
 	}
 
@@ -65,14 +72,13 @@ func (uc *AuthUsecase) Register(ctx context.Context, name, email, password strin
 
 /*
 Login authenticates a user by email and password.
-
-	It returns a signed JWT along with the authenticated user's data on success.
-	To prevent user enumeration, both a non-existent email and a wrong password
-	result in the same domain.ErrInvalidCredentials error.
+It returns a signed JWT along with the authenticated user's data on
+success. To prevent user enumeration, a non-existent email, a wrong
+password, and a hasher failure all result in the same
+domain.ErrInvalidCredentials error.
 */
 func (uc *AuthUsecase) Login(ctx context.Context, email, password string) (string, *domain.User, error) {
 	userData, err := uc.userRepo.FindByEmail(ctx, email)
-
 	if err != nil {
 		return "", nil, err
 	}
@@ -80,14 +86,12 @@ func (uc *AuthUsecase) Login(ctx context.Context, email, password string) (strin
 		return "", nil, domain.ErrInvalidCredentials
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(userData.Password), []byte(password))
-
-	if err != nil {
+	valid, err := uc.hasher.Verify(password, userData.Password)
+	if err != nil || !valid {
 		return "", nil, domain.ErrInvalidCredentials
 	}
 
 	token, err := uc.signer.Sign(userData.ID)
-
 	if err != nil {
 		return "", nil, err
 	}
