@@ -18,9 +18,19 @@ Transaction routes are protected by AuthMiddleware; auth routes
 has a token at all.
 */
 func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transactionHandler *handler.TransactionHandler, signer *auth.JWTSigner) {
+	/*
+		Public routes: no token required, since these are the entry
+		points a user goes through before they have one.
+	*/
 	router.POST("/register", authHandler.Register)
 	router.POST("/login", authHandler.Login)
 
+	/*
+		Protected routes: AuthMiddleware runs first on every request
+		here. It aborts with 401 before the handler runs if the token
+		is missing or invalid; otherwise it stores the authenticated
+		user's ID in the request context for the handler to read.
+	*/
 	router.POST("/transactions", middleware.AuthMiddleware(signer), transactionHandler.Create)
 	router.GET("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Get)
 	router.GET("/transactions", middleware.AuthMiddleware(signer), transactionHandler.List)
