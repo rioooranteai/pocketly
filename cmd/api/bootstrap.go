@@ -52,10 +52,17 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 	jwtSigner := auth.NewJWTSigner(cfg.JWTSecret)
 
 	/*
-		Business logic for registration and login. Depends only on the
-		two interfaces above, not on their concrete implementations.
+		Concrete implementation of repository.PasswordHasher, backed by
+		Argon2id. To switch algorithms (e.g. to bcrypt), replace this
+		with a different implementation of the same interface —
+		AuthUsecase never needs to change.
 	*/
 	hasher := auth.NewArgon2Hasher()
+
+	/*
+		Business logic for registration and login. Depends only on the
+		three interfaces above, not on their concrete implementations.
+	*/
 	authUsecase := usecase.NewAuthUsecase(userRepository, jwtSigner, hasher)
 
 	/*
@@ -76,6 +83,13 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 	categorizer := ai.NewDummyCategorizer()
 
 	/*
+		Concrete implementation of repository.VisionExtractor, backed by
+		OpenAI's vision-capable chat completion API. Extracts a
+		description and line items directly from a receipt image.
+	*/
+	visionExtractor := ai.NewOpenAIVisionExtractor(cfg.VisionConfig)
+
+	/*
 		Concrete implementation of repository.TransactionRepository,
 		backed by GORM/SQLite. Same swap story as userRepository above.
 	*/
@@ -83,12 +97,14 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 
 	/*
 		Business logic for creating, reading, updating, and deleting
-		transactions. Depends only on the two interfaces above.
+		transactions — including image-based creation via
+		visionExtractor. Depends only on the three interfaces above.
 	*/
-	transactionUsecase := usecase.NewTransactionUsecase(transactionRepository, categorizer)
+	transactionUsecase := usecase.NewTransactionUsecase(transactionRepository, categorizer, visionExtractor)
 
 	/*
-		HTTP layer for the /transactions endpoints.
+		HTTP layer for the /transactions endpoints, including
+		/transactions/scan for image-based creation.
 	*/
 	transactionHandler := handler.NewTransactionHandler(transactionUsecase)
 

@@ -36,4 +36,5 @@ func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transacti
 	router.GET("/transactions", middleware.AuthMiddleware(signer), transactionHandler.List)
 	router.PUT("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Update)
 	router.DELETE("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Delete)
+	router.POST("/transactions/scan", middleware.AuthMiddleware(signer), transactionHandler.Scan)
 }

@@ -39,4 +39,16 @@ var (
 		a different user.
 	*/
 	ErrUnauthorizedAccess = errors.New("you don't have access to this resource")
+
+	/*
+		ErrEmptyImageData is returned when no image bytes were provided to
+		the vision extractor.
+	*/
+	ErrEmptyImageData = errors.New("image data is empty")
+
+	/*
+	   ErrImageSizeExceedsLimit is returned when the uploaded image exceeds
+	   the configured maximum file size.
+	*/
+	ErrImageSizeExceedsLimit = errors.New("image size exceeds maximum allowed limit")
 )

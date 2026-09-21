@@ -23,19 +23,25 @@ const uncategorizedFallback = "uncategorized"
 TransactionUsecase implements the business logic for creating, reading,
 updating, and deleting financial transactions. It enforces ownership
 checks so a user can never access another user's transactions, and
-delegates automatic category detection to a Categorizer implementation.
+delegates automatic category detection to a Categorizer implementation
+and receipt image parsing to a VisionExtractor implementation.
 */
 type TransactionUsecase struct {
 	transactionRepo repository.TransactionRepository
 	categorizer     repository.CategorizerRepository
+	visionExtractor repository.VisionExtractor
 }
 
 /*
 NewTransactionUsecase builds a TransactionUsecase backed by the given
-repository and categorizer.
+repository, categorizer, and vision extractor.
 */
-func NewTransactionUsecase(transactionRepo repository.TransactionRepository, categorizer repository.CategorizerRepository) *TransactionUsecase {
-	return &TransactionUsecase{transactionRepo: transactionRepo, categorizer: categorizer}
+func NewTransactionUsecase(transactionRepo repository.TransactionRepository, categorizer repository.CategorizerRepository, visionExtractor repository.VisionExtractor) *TransactionUsecase {
+	return &TransactionUsecase{
+		transactionRepo: transactionRepo,
+		categorizer:     categorizer,
+		visionExtractor: visionExtractor,
+	}
 }
 
 /*
@@ -62,6 +68,39 @@ Categorizer based on the transaction's description. Categorization
 failures never block the transaction from being saved.
 */
 func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error) {
+	transaction := &domain.Transaction{
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		Description: description,
+		Date:        date,
+		Items:       items,
+		CreatedAt:   time.Now().UTC(),
+		Category:    uc.resolveCategory(ctx, description),
+	}
+
+	transaction.CalculateTotal()
+
+	if err := uc.transactionRepo.Create(ctx, transaction); err != nil {
+		return nil, err
+	}
+
+	return transaction, nil
+}
+
+/*
+CreateTransactionFromImage records a new transaction whose description
+and items are extracted from a receipt image via VisionExtractor,
+rather than typed in manually. Once extracted, it follows the same
+persistence path as CreateTransaction: total is recalculated from the
+extracted items, and category is resolved the same way, with the same
+fallback behavior on failure.
+*/
+func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, userID string, imageData []byte, date time.Time) (*domain.Transaction, error) {
+	description, items, err := uc.visionExtractor.Extract(ctx, imageData)
+	if err != nil {
+		return nil, err
+	}
+
 	transaction := &domain.Transaction{
 		ID:          uuid.New().String(),
 		UserID:      userID,
