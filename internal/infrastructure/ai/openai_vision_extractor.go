@@ -91,7 +91,7 @@ func (o *OpenAIVisionExtractor) Extract(ctx context.Context, imageData []byte) (
 	dataURL := fmt.Sprintf("data:image/jpeg;base64,%s", encoded)
 
 	completion, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model: openai.ChatModelGPT4o,
+		Model: openai.ChatModelGPT5_6Luna,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(visionPrompt),
 			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
