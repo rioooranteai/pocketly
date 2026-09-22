@@ -2,7 +2,9 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -208,6 +210,57 @@ func (h *TransactionHandler) Delete(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+/*
+Scan handles POST requests to record a new transaction from a receipt
+image upload. It reads the uploaded file into memory, delegates
+extraction and creation to TransactionUsecase, and responds the same
+way Create does. Date defaults to the current time since a scanned
+receipt has no explicit date field in the request.
+*/
+func (h *TransactionHandler) Scan(c *gin.Context) {
+	userID := c.GetString("userID")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	fileHeader, err := c.FormFile("receipt")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or invalid file field 'receipt'"})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open uploaded file"})
+		return
+	}
+	defer file.Close()
+
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read uploaded file"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	transaction, err := h.transactionUsecase.CreateTransactionFromImage(ctx, userID, imageData, time.Now())
+	if err != nil {
+		if errors.Is(err, domain.ErrEmptyImageData) || errors.Is(err, domain.ErrImageSizeExceedsLimit) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process receipt image"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Transaction created successfully from receipt",
+		"data":    toTransactionResponse(transaction),
+	})
 }
 
 // --- Helper Conversion ---
