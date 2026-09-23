@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	router "pocketly/internal/delivery/http"
+	"pocketly/internal/delivery/http/middleware"
 	"pocketly/internal/infrastructure/config"
 	persistence "pocketly/internal/infrastructure/persistence/gorm"
 )
@@ -57,6 +58,7 @@ func main() {
 	}
 
 	r := gin.Default()
+	r.Use(middleware.CORS())
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		log.Fatal(err)
 	}
