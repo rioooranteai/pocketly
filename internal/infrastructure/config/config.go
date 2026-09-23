@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -20,6 +21,14 @@ type Config struct {
 	AIAPIKey       string
 	VisionAPIKey   string
 	MaxImageSizeMB string
+
+	/*
+		TrustedProxies lists the proxy IPs/CIDRs allowed to set
+		X-Forwarded-For. Empty means none are trusted and the client IP
+		is taken from the TCP connection, which keeps per-IP rate
+		limiting from being bypassed with a spoofed header.
+	*/
+	TrustedProxies []string
 
 	VisionConfig VisionConfig
 }
@@ -43,12 +52,20 @@ func Load() *Config {
 		maxFileSize = 5 * 1024 * 1024 // default 5MB kalau env kosong/invalid
 	}
 
+	var trustedProxies []string
+	for _, proxy := range strings.Split(os.Getenv("TRUSTED_PROXIES"), ",") {
+		if proxy = strings.TrimSpace(proxy); proxy != "" {
+			trustedProxies = append(trustedProxies, proxy)
+		}
+	}
+
 	return &Config{
-		AppPort:    os.Getenv("APP_PORT"),
-		DBPath:     os.Getenv("DB_PATH"),
-		JWTSecret:  os.Getenv("JWT_SECRET"),
-		AIProvider: os.Getenv("AI_PROVIDER"),
-		AIAPIKey:   os.Getenv("AI_API_KEY"),
+		AppPort:        os.Getenv("APP_PORT"),
+		DBPath:         os.Getenv("DB_PATH"),
+		JWTSecret:      os.Getenv("JWT_SECRET"),
+		AIProvider:     os.Getenv("AI_PROVIDER"),
+		AIAPIKey:       os.Getenv("AI_API_KEY"),
+		TrustedProxies: trustedProxies,
 
 		VisionConfig: VisionConfig{
 			APIKey:      os.Getenv("VISION_API_KEY"),

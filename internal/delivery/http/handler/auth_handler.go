@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"pocketly/internal/delivery/http/dto"
 	"pocketly/internal/domain"
@@ -12,6 +13,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 )
+
+/*
+respondBindError writes the response for a failed ShouldBindJSON call:
+413 when the body exceeded the limit set by middleware.MaxBodySize,
+400 with a client-friendly message for everything else.
+*/
+func respondBindError(c *gin.Context, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		return
+	}
+
+	c.JSON(http.StatusBadRequest, gin.H{"error": bindErrorMessage(err)})
+}
 
 /*
 bindErrorMessage turns a ShouldBindJSON error into a client-friendly
@@ -34,6 +50,8 @@ func bindErrorMessage(err error) string {
 			messages = append(messages, fmt.Sprintf("%s is required", field))
 		case "min":
 			messages = append(messages, fmt.Sprintf("%s must be at least %s characters", field, fe.Param()))
+		case "max":
+			messages = append(messages, fmt.Sprintf("%s must be at most %s characters", field, fe.Param()))
 		default:
 			messages = append(messages, fmt.Sprintf("%s is invalid", field))
 		}
@@ -73,7 +91,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": bindErrorMessage(err)})
+		respondBindError(c, err)
 		return
 	}
 
@@ -91,6 +109,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			return
 		}
 
+		log.Printf("register failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "something went wrong"})
 		return
 	}
@@ -115,7 +134,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": bindErrorMessage(err)})
+		respondBindError(c, err)
 		return
 	}
 
@@ -128,6 +147,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			return
 		}
 
+		log.Printf("login failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "something went wrong"})
 		return
 	}

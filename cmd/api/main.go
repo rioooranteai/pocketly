@@ -30,6 +30,10 @@ func main() {
 	}
 
 	r := gin.Default()
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatal(err)
+	}
+
 	router.SetupRoutes(r, app.AuthHandler, app.TransactionHandler, app.JWTSigner)
 
 	if err := r.Run(":" + cfg.AppPort); err != nil {

@@ -12,3 +12,17 @@ type TokenSigner interface {
 	*/
 	Sign(userID string) (string, error)
 }
+
+/*
+TokenVerifier is the contract for validating an authentication token
+and extracting the user it was issued for. The HTTP middleware depends
+only on this interface, mirroring how the usecase layer depends on
+TokenSigner.
+*/
+type TokenVerifier interface {
+	/*
+		ParseUserID validates the token and returns its user ID, or an
+		error if the token is malformed, expired, or not trusted.
+	*/
+	ParseUserID(token string) (string, error)
+}
