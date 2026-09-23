@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,14 +18,26 @@ type JWTSigner struct {
 }
 
 /*
-NewJWTSigner builds a JWTSigner using the given secret key.
-Tokens issued by this signer are valid for 24 hours.
+minSecretLength is the shortest secret accepted for HS256. Anything
+shorter is weaker than the 256-bit key the algorithm is designed for.
 */
-func NewJWTSigner(secret string) *JWTSigner {
+const minSecretLength = 32
+
+/*
+NewJWTSigner builds a JWTSigner using the given secret key.
+Tokens issued by this signer are valid for 24 hours. It returns an
+error if the secret is empty or shorter than minSecretLength, since
+a weak secret would let anyone forge valid tokens.
+*/
+func NewJWTSigner(secret string) (*JWTSigner, error) {
+	if len(secret) < minSecretLength {
+		return nil, fmt.Errorf("JWT_SECRET must be at least %d characters", minSecretLength)
+	}
+
 	return &JWTSigner{
 		secret: []byte(secret),
 		ttl:    24 * time.Hour,
-	}
+	}, nil
 }
 
 /*
@@ -47,12 +60,16 @@ func (jw *JWTSigner) Sign(userID string) (string, error) {
 /*
 ParseUserID validates the given JWT and extracts the user ID from its
 subject claim. It returns an error if the token is malformed, expired,
-or signed with a different secret.
+missing an expiry, signed with an algorithm other than HS256, or
+signed with a different secret.
 */
 func (jw *JWTSigner) ParseUserID(tokenStr string) (string, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		return jw.secret, nil
-	})
+	},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithExpirationRequired(),
+	)
 	if err != nil {
 		return "", err
 	}

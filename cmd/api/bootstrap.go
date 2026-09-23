@@ -49,7 +49,10 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 		session tokens), replace this with a different implementation
 		of the same interface — AuthUsecase never needs to change.
 	*/
-	jwtSigner := auth.NewJWTSigner(cfg.JWTSecret)
+	jwtSigner, err := auth.NewJWTSigner(cfg.JWTSecret)
+	if err != nil {
+		return nil, err
+	}
 
 	/*
 		Concrete implementation of repository.PasswordHasher, backed by

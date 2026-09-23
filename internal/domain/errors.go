@@ -28,6 +28,12 @@ var (
 	ErrInvalidEmail = errors.New("invalid email format")
 
 	/*
+		ErrInvalidName is returned when a submitted name is empty or
+		contains only whitespace.
+	*/
+	ErrInvalidName = errors.New("name must not be empty")
+
+	/*
 		ErrTransactionNotFound is returned when a requested transaction
 		does not exist.
 	*/

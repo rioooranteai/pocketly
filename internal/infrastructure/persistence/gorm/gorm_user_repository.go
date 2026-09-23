@@ -55,11 +55,19 @@ func NewGormUserRepository(db *gorm.DB) *GormUserRepository {
 
 /*
 Create persists a new user record in the database.
+It returns domain.ErrEmailAlreadyExists when the email's unique index
+rejects the insert, which covers two concurrent registrations for the
+same email slipping past the usecase's FindByEmail check.
 */
 func (gru *GormUserRepository) Create(ctx context.Context, u *domain.User) error {
 	model := toUserModel(u)
 
-	return gru.db.WithContext(ctx).Create(model).Error
+	err := gru.db.WithContext(ctx).Create(model).Error
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return domain.ErrEmailAlreadyExists
+	}
+
+	return err
 }
 
 /*
