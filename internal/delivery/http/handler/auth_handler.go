@@ -2,13 +2,45 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"pocketly/internal/delivery/http/dto"
 	"pocketly/internal/domain"
 	"pocketly/internal/usecase"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
+
+/*
+bindErrorMessage turns a ShouldBindJSON error into a client-friendly
+message. Validation failures are reported per field using the JSON
+field name; anything else (malformed JSON, wrong types) is reported
+as a generic invalid body, so Go struct names never reach the client.
+*/
+func bindErrorMessage(err error) string {
+	var validationErrs validator.ValidationErrors
+	if !errors.As(err, &validationErrs) {
+		return "invalid request body"
+	}
+
+	messages := make([]string, 0, len(validationErrs))
+	for _, fe := range validationErrs {
+		field := strings.ToLower(fe.Field())
+
+		switch fe.Tag() {
+		case "required":
+			messages = append(messages, fmt.Sprintf("%s is required", field))
+		case "min":
+			messages = append(messages, fmt.Sprintf("%s must be at least %s characters", field, fe.Param()))
+		default:
+			messages = append(messages, fmt.Sprintf("%s is invalid", field))
+		}
+	}
+
+	return strings.Join(messages, "; ")
+}
 
 /*
 AuthHandler exposes authentication endpoints over HTTP. It only handles
@@ -32,7 +64,7 @@ func NewAuthHandler(AuthUsecase *usecase.AuthUsecase) *AuthHandler {
 Register handles POST requests to create a new user account.
 It validates the incoming JSON body, delegates account creation to
 AuthUsecase, and maps domain errors to the appropriate HTTP status:
-409 for a duplicate email, 400 for an invalid email format, and 500
+409 for a duplicate email, 400 for an invalid email or name, and 500
 for any unexpected failure. On success it responds 201 Created with
 the new user's public data.
 */
@@ -41,7 +73,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": bindErrorMessage(err)})
 		return
 	}
 
@@ -54,7 +86,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			return
 		}
 
-		if errors.Is(err, domain.ErrInvalidEmail) {
+		if errors.Is(err, domain.ErrInvalidEmail) || errors.Is(err, domain.ErrInvalidName) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -63,10 +95,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	response := dto.AuthResponse{
+	response := dto.RegisterResponse{
 		Name:  userData.Name,
 		Email: userData.Email,
-		Token: "",
 	}
 
 	c.JSON(http.StatusCreated, response)
@@ -84,7 +115,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": bindErrorMessage(err)})
 		return
 	}
 

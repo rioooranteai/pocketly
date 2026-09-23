@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,21 +33,25 @@ func NewAuthUsecase(userRepo repository.UserRepository, signer repository.TokenS
 
 /*
 Register creates a new user account in the system.
-It validates the email format, ensures email uniqueness across the
-platform, and hashes the user's password via PasswordHasher before
-persistence.
+It trims the name, normalizes the email, validates both, ensures email
+uniqueness across the platform, and hashes the user's password via
+PasswordHasher before persistence.
 */
 func (uc *AuthUsecase) Register(ctx context.Context, name, email, password string) (*domain.User, error) {
 	newUserData := &domain.User{
-		Name:  name,
-		Email: email,
+		Name:  strings.TrimSpace(name),
+		Email: domain.NormalizeEmail(email),
+	}
+
+	if newUserData.Name == "" {
+		return nil, domain.ErrInvalidName
 	}
 
 	if !newUserData.IsValidEmail() {
 		return nil, domain.ErrInvalidEmail
 	}
 
-	existingUser, err := uc.userRepo.FindByEmail(ctx, email)
+	existingUser, err := uc.userRepo.FindByEmail(ctx, newUserData.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +83,7 @@ password, and a hasher failure all result in the same
 domain.ErrInvalidCredentials error.
 */
 func (uc *AuthUsecase) Login(ctx context.Context, email, password string) (string, *domain.User, error) {
-	userData, err := uc.userRepo.FindByEmail(ctx, email)
+	userData, err := uc.userRepo.FindByEmail(ctx, domain.NormalizeEmail(email))
 	if err != nil {
 		return "", nil, err
 	}
