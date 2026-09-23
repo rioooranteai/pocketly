@@ -1,12 +1,21 @@
 package router
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 
 	"pocketly/internal/delivery/http/handler"
 	"pocketly/internal/delivery/http/middleware"
-	"pocketly/internal/infrastructure/auth"
+	"pocketly/internal/repository"
 )
+
+/*
+authBodyLimit caps register and login request bodies. Their largest
+valid payload is well under 1KB, so 4KB leaves room without letting
+a client stream megabytes into the JSON decoder.
+*/
+const authBodyLimit = 4 * 1024
 
 /*
 SetupRoutes registers all HTTP routes for the application and wires
@@ -15,18 +24,20 @@ place where URL paths and HTTP methods are mapped to application
 behavior — the handlers themselves stay unaware of routing details.
 Transaction routes are protected by AuthMiddleware; auth routes
 (register, login) remain public since they are used before a user
-has a token at all.
+has a token at all, so they are rate limited and size limited instead.
 */
-func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transactionHandler *handler.TransactionHandler, signer *auth.JWTSigner) {
+func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transactionHandler *handler.TransactionHandler, signer repository.TokenVerifier) {
 	v1 := router.Group("/api/v1")
 
 	{
 		/*
 			Public routes: no token required, since these are the entry
-			points a user goes through before they have one.
+			points a user goes through before they have one. Each route
+			has its own per-IP limit to slow down password guessing and
+			mass account creation, and every attempt costs an Argon2 hash.
 		*/
-		v1.POST("/register", authHandler.Register)
-		v1.POST("/login", authHandler.Login)
+		v1.POST("/register", middleware.RateLimit(5, time.Minute), middleware.MaxBodySize(authBodyLimit), authHandler.Register)
+		v1.POST("/login", middleware.RateLimit(10, time.Minute), middleware.MaxBodySize(authBodyLimit), authHandler.Login)
 
 		/*
 			Protected routes: AuthMiddleware runs first on every request

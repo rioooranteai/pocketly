@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -80,7 +81,9 @@ Login authenticates a user by email and password.
 It returns a signed JWT along with the authenticated user's data on
 success. To prevent user enumeration, a non-existent email, a wrong
 password, and a hasher failure all result in the same
-domain.ErrInvalidCredentials error.
+domain.ErrInvalidCredentials error. A non-existent email still runs
+one password hash, so its response time matches a wrong password and
+cannot be used to tell which emails are registered.
 */
 func (uc *AuthUsecase) Login(ctx context.Context, email, password string) (string, *domain.User, error) {
 	userData, err := uc.userRepo.FindByEmail(ctx, domain.NormalizeEmail(email))
@@ -88,11 +91,16 @@ func (uc *AuthUsecase) Login(ctx context.Context, email, password string) (strin
 		return "", nil, err
 	}
 	if userData == nil {
+		_, _ = uc.hasher.Hash(password)
 		return "", nil, domain.ErrInvalidCredentials
 	}
 
 	valid, err := uc.hasher.Verify(password, userData.Password)
-	if err != nil || !valid {
+	if err != nil {
+		log.Printf("password verify failed for user %s: %v", userData.ID, err)
+		return "", nil, domain.ErrInvalidCredentials
+	}
+	if !valid {
 		return "", nil, domain.ErrInvalidCredentials
 	}
 
