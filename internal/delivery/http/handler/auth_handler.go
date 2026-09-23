@@ -84,7 +84,8 @@ It validates the incoming JSON body, delegates account creation to
 AuthUsecase, and maps domain errors to the appropriate HTTP status:
 409 for a duplicate email, 400 for an invalid email or name, and 500
 for any unexpected failure. On success it responds 201 Created with
-the new user's public data.
+a signed JWT and the new user's public data, so the client is signed
+in right away without a separate login call.
 */
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req dto.RegisterRequest
@@ -97,7 +98,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	userData, err := h.AuthUsecase.Register(ctx, req.Name, req.Email, req.Password)
+	token, userData, err := h.AuthUsecase.Register(ctx, req.Name, req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailAlreadyExists) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -114,9 +115,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	response := dto.RegisterResponse{
+	response := dto.AuthResponse{
 		Name:  userData.Name,
 		Email: userData.Email,
+		Token: token,
 	}
 
 	c.JSON(http.StatusCreated, response)

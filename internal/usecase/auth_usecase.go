@@ -33,31 +33,33 @@ func NewAuthUsecase(userRepo repository.UserRepository, signer repository.TokenS
 }
 
 /*
-Register creates a new user account in the system.
-It trims the name, normalizes the email, validates both, ensures email
-uniqueness across the platform, and hashes the user's password via
-PasswordHasher before persistence.
+Register creates a new user account in the system and signs the user
+in, returning a token so the client does not need a separate login
+call. It trims the name, normalizes the email, validates both, ensures
+email uniqueness across the platform, and hashes the user's password
+via PasswordHasher before persistence. The token is signed before the
+user is saved, so a signing failure never leaves an account behind.
 */
-func (uc *AuthUsecase) Register(ctx context.Context, name, email, password string) (*domain.User, error) {
+func (uc *AuthUsecase) Register(ctx context.Context, name, email, password string) (string, *domain.User, error) {
 	newUserData := &domain.User{
 		Name:  strings.TrimSpace(name),
 		Email: domain.NormalizeEmail(email),
 	}
 
 	if newUserData.Name == "" {
-		return nil, domain.ErrInvalidName
+		return "", nil, domain.ErrInvalidName
 	}
 
 	if !newUserData.IsValidEmail() {
-		return nil, domain.ErrInvalidEmail
+		return "", nil, domain.ErrInvalidEmail
 	}
 
 	existingUser, err := uc.userRepo.FindByEmail(ctx, newUserData.Email)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if existingUser != nil {
-		return nil, domain.ErrEmailAlreadyExists
+		return "", nil, domain.ErrEmailAlreadyExists
 	}
 
 	newUserData.ID = uuid.New().String()
@@ -65,15 +67,20 @@ func (uc *AuthUsecase) Register(ctx context.Context, name, email, password strin
 
 	hashedPassword, err := uc.hasher.Hash(password)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	newUserData.Password = hashedPassword
 
-	if err := uc.userRepo.Create(ctx, newUserData); err != nil {
-		return nil, err
+	token, err := uc.signer.Sign(newUserData.ID)
+	if err != nil {
+		return "", nil, err
 	}
 
-	return newUserData, nil
+	if err := uc.userRepo.Create(ctx, newUserData); err != nil {
+		return "", nil, err
+	}
+
+	return token, newUserData, nil
 }
 
 /*

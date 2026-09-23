@@ -27,20 +27,9 @@ type LoginRequest struct {
 }
 
 /*
-RegisterResponse is the JSON shape returned after a successful
-registration. No token is issued here — the client must log in to
-obtain one. It deliberately omits the password field so a hashed
+AuthResponse is the JSON shape returned after a successful register
+or login. It deliberately omits the password field so a hashed
 credential can never leak into an API response.
-*/
-type RegisterResponse struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
-
-/*
-AuthResponse is the JSON shape returned after a successful login.
-It deliberately omits the password field so a hashed credential can
-never leak into an API response.
 */
 type AuthResponse struct {
 	Name  string `json:"name"`
