@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -20,10 +21,18 @@ var models = []any{&UserModel{}, &TransactionModel{}, &TransactionItemModel{}}
 Connect opens a SQLite database connection using the path from Config.
 It does not touch the schema — run Migrate (via cmd/migrate) for that,
 so schema changes are applied deliberately rather than on every
-server start.
+server start. Foreign key enforcement is enabled through the DSN so it
+applies to every pooled connection; SQLite leaves it off by default,
+which would silently skip the ON DELETE CASCADE rules.
 */
 func Connect(cfg *config.Config) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(cfg.DBPath), &gorm.Config{TranslateError: true})
+	sep := "?"
+	if strings.Contains(cfg.DBPath, "?") {
+		sep = "&"
+	}
+	dsn := cfg.DBPath + sep + "_pragma=foreign_keys(1)"
+
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}

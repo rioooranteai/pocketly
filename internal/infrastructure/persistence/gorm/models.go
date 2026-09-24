@@ -8,7 +8,10 @@ import (
 UserModel is the GORM row representation of a user account.
 It intentionally stays separate from domain.User: this struct carries
 database-specific tags (primary key, unique index) that the business
-layer must never depend on.
+layer must never depend on. A user owns many Transactions; each
+Transaction belongs to exactly one user via UserID. Transactions is
+only declared so GORM creates the foreign key — it is never preloaded.
+Deleting a user cascades to their Transactions at the database level.
 */
 type UserModel struct {
 	ID        string `gorm:"primaryKey"`
@@ -16,6 +19,8 @@ type UserModel struct {
 	Email     string `gorm:"uniqueIndex"`
 	Password  string
 	CreatedAt time.Time
+
+	Transactions []TransactionModel `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 }
 
 /*
