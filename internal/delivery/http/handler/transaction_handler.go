@@ -224,7 +224,9 @@ Scan handles POST requests to record a new transaction from a receipt
 image upload. It reads the uploaded file into memory, delegates
 extraction and creation to TransactionUsecase, and responds the same
 way Create does. Date defaults to the current time since a scanned
-receipt has no explicit date field in the request.
+receipt has no explicit date field in the request. The route's
+MaxBodySize middleware bounds how much is read; a body past that limit
+is answered with 413 Request Entity Too Large.
 */
 func (h *TransactionHandler) Scan(c *gin.Context) {
 	userID := c.GetString("userID")
@@ -235,6 +237,11 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 
 	fileHeader, err := c.FormFile("receipt")
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "receipt image too large"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or invalid file field 'receipt'"})
 		return
 	}

@@ -63,7 +63,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	router.SetupRoutes(r, app.AuthHandler, app.TransactionHandler, app.JWTSigner)
+	router.SetupRoutes(r, app.AuthHandler, app.TransactionHandler, app.JWTSigner, cfg.VisionConfig.MaxFileSize)
 
 	/*
 		ReadHeaderTimeout stops slow clients from holding connections

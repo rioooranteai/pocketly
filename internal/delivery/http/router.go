@@ -18,6 +18,13 @@ a client stream megabytes into the JSON decoder.
 const authBodyLimit = 4 * 1024
 
 /*
+scanMultipartOverhead is added on top of the image size limit for
+/transactions/scan, leaving room for the multipart boundaries and part
+headers around the file so an image right at the limit still fits.
+*/
+const scanMultipartOverhead = 64 * 1024
+
+/*
 SetupRoutes registers all HTTP routes for the application and wires
 each one to its corresponding handler method. This is the single
 place where URL paths and HTTP methods are mapped to application
@@ -25,8 +32,11 @@ behavior — the handlers themselves stay unaware of routing details.
 Transaction routes are protected by AuthMiddleware; auth routes
 (register, login) remain public since they are used before a user
 has a token at all, so they are rate limited and size limited instead.
+maxImageSize caps the receipt upload on /transactions/scan, so an
+oversized body is rejected while it is read instead of being buffered
+into memory first.
 */
-func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transactionHandler *handler.TransactionHandler, signer repository.TokenVerifier) {
+func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transactionHandler *handler.TransactionHandler, signer repository.TokenVerifier, maxImageSize int64) {
 	v1 := router.Group("/api/v1")
 
 	{
@@ -50,7 +60,7 @@ func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transacti
 		v1.GET("/transactions", middleware.AuthMiddleware(signer), transactionHandler.List)
 		v1.PUT("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Update)
 		v1.DELETE("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Delete)
-		v1.POST("/transactions/scan", middleware.AuthMiddleware(signer), transactionHandler.Scan)
+		v1.POST("/transactions/scan", middleware.AuthMiddleware(signer), middleware.MaxBodySize(maxImageSize+scanMultipartOverhead), transactionHandler.Scan)
 	}
 
 }

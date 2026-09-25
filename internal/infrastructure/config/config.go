@@ -2,11 +2,17 @@ package config
 
 import (
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
 )
+
+/*
+maxImageSize is the largest receipt image, in bytes, accepted by
+/transactions/scan. It is a fixed application limit rather than an
+environment variable, so every deployment enforces the same cap.
+*/
+const maxImageSize int64 = 5 * 1024 * 1024
 
 /*
 Config holds all environment-derived settings the application needs
@@ -14,13 +20,12 @@ at startup: server port, database location, JWT signing secret, and
 AI provider credentials.
 */
 type Config struct {
-	AppPort        string
-	DBPath         string
-	JWTSecret      string
-	AIProvider     string
-	AIAPIKey       string
-	VisionAPIKey   string
-	MaxImageSizeMB string
+	AppPort      string
+	DBPath       string
+	JWTSecret    string
+	AIProvider   string
+	AIAPIKey     string
+	VisionAPIKey string
 
 	/*
 		TrustedProxies lists the proxy IPs/CIDRs allowed to set
@@ -47,11 +52,6 @@ the deployment platform (Docker, Kubernetes, etc.) instead.
 func Load() *Config {
 	_ = godotenv.Load()
 
-	maxFileSize, err := strconv.ParseInt(os.Getenv("MAX_IMAGE_SIZE_MB"), 10, 64)
-	if err != nil || maxFileSize <= 0 {
-		maxFileSize = 5 * 1024 * 1024 // default 5MB kalau env kosong/invalid
-	}
-
 	var trustedProxies []string
 	for _, proxy := range strings.Split(os.Getenv("TRUSTED_PROXIES"), ",") {
 		if proxy = strings.TrimSpace(proxy); proxy != "" {
@@ -69,7 +69,7 @@ func Load() *Config {
 
 		VisionConfig: VisionConfig{
 			APIKey:      os.Getenv("VISION_API_KEY"),
-			MaxFileSize: maxFileSize,
+			MaxFileSize: maxImageSize,
 		},
 	}
 }
