@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -93,6 +94,7 @@ func (h *TransactionHandler) Get(c *gin.Context) {
 	transaction, err := h.transactionUsecase.GetTransaction(ctx, userID, id)
 	if err != nil {
 		if isTransactionNotFound(err) {
+			logUnauthorizedAccess(c, err, userID, id)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
@@ -172,6 +174,7 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 	transaction, err := h.transactionUsecase.UpdateTransaction(ctx, userID, id, req.Description, domainItems, req.Date)
 	if err != nil {
 		if isTransactionNotFound(err) {
+			logUnauthorizedAccess(c, err, userID, id)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
@@ -205,6 +208,7 @@ func (h *TransactionHandler) Delete(c *gin.Context) {
 	err := h.transactionUsecase.DeleteTransaction(ctx, userID, id)
 	if err != nil {
 		if isTransactionNotFound(err) {
+			logUnauthorizedAccess(c, err, userID, id)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
@@ -275,6 +279,21 @@ errors separately; hiding the difference is an HTTP concern.
 */
 func isTransactionNotFound(err error) bool {
 	return errors.Is(err, domain.ErrTransactionNotFound) || errors.Is(err, domain.ErrUnauthorizedAccess)
+}
+
+/*
+logUnauthorizedAccess records an attempt to reach a transaction owned
+by another user. The client only ever sees 404, so this log line is
+the one place those attempts stay visible, e.g. to spot a user probing
+IDs. Plain not-found errors are not logged, since mistyped or stale
+IDs are routine.
+*/
+func logUnauthorizedAccess(c *gin.Context, err error, userID, transactionID string) {
+	if !errors.Is(err, domain.ErrUnauthorizedAccess) {
+		return
+	}
+	log.Printf("unauthorized transaction access: user=%s transaction=%s method=%s ip=%s",
+		userID, transactionID, c.Request.Method, c.ClientIP())
 }
 
 // --- Helper Conversion ---
