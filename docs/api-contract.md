@@ -884,6 +884,8 @@ Jangan mengisi header `Content-Type` secara manual. Browser akan mengisinya send
 }
 ```
 
+`description` dari hasil scan berisi **nama toko** seperti yang tercetak di struk, tanpa alamat, kota, atau nomor telepon. Kalau nama toko tidak terbaca, isinya ringkasan singkat barang yang dibeli.
+
 **Kemungkinan error**
 
 | Status | `error` | Kapan |

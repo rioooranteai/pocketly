@@ -72,17 +72,30 @@ type extractedReceipt struct {
 /*
 visionPrompt instructs the model to return a strictly-formatted JSON
 object matching extractedReceipt, with no additional commentary.
+
+The description is the merchant name as printed on the receipt
+("Apotek K24", "SPBU Pertamina"), because it tells the categorizer a
+lot about the purchase. Address, city and phone number are left out:
+they are not stored anywhere, and words like "Jl. Tol" or "Jl. Rumah
+Sakit" would mislead keyword categorization. When no merchant name is
+readable, a short summary keeps the description non-empty, since
+normalizeInput rejects a blank one.
 */
 const visionPrompt = `You are given an image of a shopping receipt.
 Extract the following information and respond with ONLY a valid JSON object,
 no other text, no markdown code fences, matching exactly this shape:
 
 {
-  "description": "short summary of the merchant or transaction",
+  "description": "merchant or store name, e.g. Indomaret or Apotek K24",
   "items": [
     {"name": "item name", "quantity": 1, "price": 15000}
   ]
 }
+
+Rules for "description":
+- Use the merchant or store name as printed on the receipt.
+- Do NOT include the address, street, city, postal code, phone number, tax ID, or cashier name.
+- If no merchant name is readable, write a short summary of what was bought instead (e.g. "Groceries"). Never leave it empty.
 
 If a field cannot be determined, use a reasonable default (quantity 1, price 0).`
 
