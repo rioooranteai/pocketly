@@ -157,14 +157,15 @@ func (gtr *GormTransactionRepository) ListByUser(ctx context.Context, userID str
 /*
 Update persists changes to an existing transaction. Items are fully
 replaced via GORM's association Replace mode: the old set of items is
-cleared and swapped for the new one, so removed items are not left
-orphaned in the database.
+cleared and swapped for the new one. Unscoped makes Replace delete the
+removed items; without it GORM only nulls their TransactionID, which
+leaves them orphaned in the database.
 */
 func (gtr *GormTransactionRepository) Update(ctx context.Context, t *domain.Transaction) error {
 	model := toTransactionModel(t)
 
 	return gtr.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(model).Association("Items").Replace(model.Items); err != nil {
+		if err := tx.Model(model).Association("Items").Unscoped().Replace(model.Items); err != nil {
 			return err
 		}
 		return tx.Save(model).Error

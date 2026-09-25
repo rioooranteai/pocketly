@@ -61,6 +61,21 @@ func (uc *TransactionUsecase) resolveCategory(ctx context.Context, description s
 }
 
 /*
+assignItemIDs gives every item a fresh ID and links it to the given
+transaction. Items arrive without IDs (handlers never set one), and
+an empty string primary key makes every item after the first collide
+on insert, which GORM silently skips. IDs are generated here for the
+same reason transaction and user IDs are: identity is an application
+decision, not something a delivery or AI adapter should own.
+*/
+func assignItemIDs(transaction *domain.Transaction) {
+	for i := range transaction.Items {
+		transaction.Items[i].ID = uuid.New().String()
+		transaction.Items[i].TransactionID = transaction.ID
+	}
+}
+
+/*
 CreateTransaction records a new transaction for the given user. The
 total amount is derived from the sum of its items rather than accepted
 directly, and the category is determined automatically via the
@@ -78,6 +93,7 @@ func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID stri
 		Category:    uc.resolveCategory(ctx, description),
 	}
 
+	assignItemIDs(transaction)
 	transaction.CalculateTotal()
 
 	if err := uc.transactionRepo.Create(ctx, transaction); err != nil {
@@ -111,6 +127,7 @@ func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, us
 		Category:    uc.resolveCategory(ctx, description),
 	}
 
+	assignItemIDs(transaction)
 	transaction.CalculateTotal()
 
 	if err := uc.transactionRepo.Create(ctx, transaction); err != nil {
@@ -164,6 +181,7 @@ func (uc *TransactionUsecase) UpdateTransaction(ctx context.Context, userID stri
 	transaction.Date = date
 	transaction.Items = items
 	transaction.Category = uc.resolveCategory(ctx, description)
+	assignItemIDs(transaction)
 	transaction.CalculateTotal()
 
 	if err := uc.transactionRepo.Update(ctx, transaction); err != nil {
