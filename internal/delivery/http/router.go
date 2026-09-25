@@ -26,6 +26,16 @@ into the JSON decoder.
 const transactionBodyLimit = 64 * 1024
 
 /*
+scanRateLimit and scanRateWindow cap receipt scans per user. Every
+scan is a paid vision API call, so one account must not be able to
+send them in an unbounded loop.
+*/
+const (
+	scanRateLimit  = 10
+	scanRateWindow = time.Minute
+)
+
+/*
 scanMultipartOverhead is added on top of the image size limit for
 /transactions/scan, leaving room for the multipart boundaries and part
 headers around the file so an image right at the limit still fits.
@@ -68,7 +78,7 @@ func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transacti
 		v1.GET("/transactions", middleware.AuthMiddleware(signer), transactionHandler.List)
 		v1.PUT("/transactions/:id", middleware.AuthMiddleware(signer), middleware.MaxBodySize(transactionBodyLimit), transactionHandler.Update)
 		v1.DELETE("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Delete)
-		v1.POST("/transactions/scan", middleware.AuthMiddleware(signer), middleware.MaxBodySize(maxImageSize+scanMultipartOverhead), transactionHandler.Scan)
+		v1.POST("/transactions/scan", middleware.AuthMiddleware(signer), middleware.RateLimitPerUser(scanRateLimit, scanRateWindow), middleware.MaxBodySize(maxImageSize+scanMultipartOverhead), transactionHandler.Scan)
 	}
 
 }

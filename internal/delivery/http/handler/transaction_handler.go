@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"pocketly/internal/delivery/http/dto"
+	"pocketly/internal/delivery/http/middleware"
 	"pocketly/internal/domain"
 )
 
@@ -43,7 +44,7 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetString("userID")
+	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -79,7 +80,7 @@ not exist or belongs to another user (see isTransactionNotFound). On
 success it responds 200 OK with the requested transaction.
 */
 func (h *TransactionHandler) Get(c *gin.Context) {
-	userID := c.GetString("userID")
+	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -111,7 +112,7 @@ It delegates retrieval to TransactionService and maps internal errors to 500 Int
 Server Error. On success it responds 200 OK with a list of user transactions.
 */
 func (h *TransactionHandler) List(c *gin.Context) {
-	userID := c.GetString("userID")
+	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -144,7 +145,7 @@ the transaction does not exist or belongs to another user (see
 isTransactionNotFound). On success it responds 200 OK with the updated transaction details.
 */
 func (h *TransactionHandler) Update(c *gin.Context) {
-	userID := c.GetString("userID")
+	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -193,7 +194,7 @@ exist or belongs to another user (see isTransactionNotFound). On success
 it responds 204 No Content with an empty response body.
 */
 func (h *TransactionHandler) Delete(c *gin.Context) {
-	userID := c.GetString("userID")
+	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -227,7 +228,7 @@ MaxBodySize middleware bounds how much is read; a body past that limit
 is answered with 413 Request Entity Too Large.
 */
 func (h *TransactionHandler) Scan(c *gin.Context) {
-	userID := c.GetString("userID")
+	userID := c.GetString(middleware.UserIDKey)
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return

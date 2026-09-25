@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -13,6 +14,16 @@ import (
 	"pocketly/internal/domain"
 	"pocketly/internal/port"
 )
+
+/*
+visionTimeout bounds one Extract call, including the SDK's automatic
+retries. The OpenAI client has no request timeout by default, and the
+HTTP server sets no write timeout, so without this a hung provider
+would hold the /scan request open for as long as the client waits.
+It stays below main.go's shutdownTimeout so a scan in flight can
+still finish during a graceful shutdown.
+*/
+const visionTimeout = 25 * time.Second
 
 /*
 OpenAIVisionExtractor implements port.VisionExtractor using
@@ -81,9 +92,13 @@ visionPrompt, and parses the resulting JSON into a description and a
 list of domain.TransactionItem. The data URL is labelled with the
 image's real type (PNG, JPEG, WebP, ...) sniffed from its bytes, since
 uploads are not always JPEG. Items are returned without ID or
-TransactionID; TransactionUsecase assigns both before saving.
+TransactionID; TransactionUsecase assigns both before saving. The
+whole call, retries included, is cut off after visionTimeout.
 */
 func (o *OpenAIVisionExtractor) Extract(ctx context.Context, imageData []byte) (string, []domain.TransactionItem, error) {
+	ctx, cancel := context.WithTimeout(ctx, visionTimeout)
+	defer cancel()
+
 	encoded := base64.StdEncoding.EncodeToString(imageData)
 	dataURL := fmt.Sprintf("data:%s;base64,%s", http.DetectContentType(imageData), encoded)
 

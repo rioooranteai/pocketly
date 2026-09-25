@@ -78,6 +78,28 @@ X-Forwarded-For from proxies configured via SetTrustedProxies —
 otherwise a client could dodge the limit by spoofing that header.
 */
 func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
+	return rateLimit(limit, window, func(c *gin.Context) string {
+		return c.ClientIP()
+	})
+}
+
+/*
+RateLimitPerUser works like RateLimit but counts requests per
+authenticated user instead of per IP, so users sharing one IP (an
+office NAT, mobile carrier) do not use up each other's quota. It must
+run after AuthMiddleware, which sets the user ID it keys on.
+*/
+func RateLimitPerUser(limit int, window time.Duration) gin.HandlerFunc {
+	return rateLimit(limit, window, func(c *gin.Context) string {
+		return c.GetString(UserIDKey)
+	})
+}
+
+/*
+rateLimit builds the limiter middleware shared by RateLimit and
+RateLimitPerUser, counting requests under whatever key keyOf returns.
+*/
+func rateLimit(limit int, window time.Duration, keyOf func(c *gin.Context) string) gin.HandlerFunc {
 	rl := &rateLimiter{
 		limit:   limit,
 		window:  window,
@@ -85,7 +107,7 @@ func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		allowed, retryAfter := rl.allow(c.ClientIP(), time.Now())
+		allowed, retryAfter := rl.allow(keyOf(c), time.Now())
 		if !allowed {
 			c.Header("Retry-After", strconv.Itoa(int(math.Ceil(retryAfter.Seconds()))))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
