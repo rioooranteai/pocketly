@@ -32,3 +32,12 @@ func (t *Transaction) CalculateTotal() {
 		t.TotalAmount += item.Subtotal()
 	}
 }
+
+/*
+HasValidTotal reports whether TotalAmount is a finite number. Each
+item can be valid on its own while their sum still overflows to +Inf,
+so this must be checked after CalculateTotal.
+*/
+func (t *Transaction) HasValidTotal() bool {
+	return isFinite(t.TotalAmount)
+}

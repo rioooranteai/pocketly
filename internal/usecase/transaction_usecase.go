@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,20 +81,45 @@ func assignItemIDs(transaction *domain.Transaction) {
 }
 
 /*
-validateItems checks every item against the domain's item rules
-before anything is saved. It runs in the usecase rather than relying
-on DTO binding tags, because items reach this layer from more than
-one source: the HTTP body, and the vision extractor on /scan, whose
-output never passes through a DTO. The error names the 1-based item
-position so the caller can tell which one was rejected.
+finalizeItems assigns item IDs, recalculates the total, and rejects a
+total that overflowed. It runs before the categorizer is called, so an
+invalid transaction never costs an AI request.
 */
-func validateItems(items []domain.TransactionItem) error {
-	for i, item := range items {
-		if !item.ValidateItemData() {
-			return fmt.Errorf("item %d: %w", i+1, domain.ErrInvalidItemData)
-		}
+func finalizeItems(transaction *domain.Transaction) error {
+	assignItemIDs(transaction)
+	transaction.CalculateTotal()
+	if !transaction.HasValidTotal() {
+		return domain.ErrTotalOutOfRange
 	}
 	return nil
+}
+
+/*
+normalizeInput trims the description and item names, then checks them
+against the domain rules before anything is saved: the description
+must not be blank, there must be at least one item, and every item
+must pass TransactionItem.ValidateItemData. It runs in the usecase
+rather than relying on DTO binding tags, because input reaches this
+layer from more than one source: the HTTP body, and the vision
+extractor on /scan, whose output never passes through a DTO. It
+returns the trimmed description; item names are trimmed in place.
+Item errors name the 1-based item position.
+*/
+func normalizeInput(description string, items []domain.TransactionItem) (string, error) {
+	description = strings.TrimSpace(description)
+	if description == "" {
+		return "", domain.ErrInvalidDescription
+	}
+	if len(items) == 0 {
+		return "", domain.ErrNoItems
+	}
+	for i := range items {
+		items[i].Name = strings.TrimSpace(items[i].Name)
+		if !items[i].ValidateItemData() {
+			return "", fmt.Errorf("item %d: %w", i+1, domain.ErrInvalidItemData)
+		}
+	}
+	return description, nil
 }
 
 /*
@@ -104,7 +130,8 @@ Categorizer based on the transaction's description. Categorization
 failures never block the transaction from being saved.
 */
 func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error) {
-	if err := validateItems(items); err != nil {
+	description, err := normalizeInput(description, items)
+	if err != nil {
 		return nil, err
 	}
 
@@ -115,11 +142,12 @@ func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID stri
 		Date:        date,
 		Items:       items,
 		CreatedAt:   time.Now().UTC(),
-		Category:    uc.resolveCategory(ctx, description),
 	}
 
-	assignItemIDs(transaction)
-	transaction.CalculateTotal()
+	if err := finalizeItems(transaction); err != nil {
+		return nil, err
+	}
+	transaction.Category = uc.resolveCategory(ctx, description)
 
 	if err := uc.transactionRepo.Create(ctx, transaction); err != nil {
 		return nil, err
@@ -133,12 +161,14 @@ CreateTransactionFromImage records a new transaction whose description
 and items are extracted from a receipt image via VisionExtractor,
 rather than typed in manually. The image is checked for being empty
 or larger than maxImageSize before any provider is called, so the
-rule holds whichever VisionExtractor is wired in. Once extracted, it
-follows the same persistence path as CreateTransaction: total is
-recalculated from the extracted items, and category is resolved the
-same way, with the same fallback behavior on failure.
+rule holds whichever VisionExtractor is wired in. The extracted data
+goes through the same normalizeInput checks as a typed-in transaction,
+so a receipt with no readable items or description is rejected and
+nothing is saved. A receipt carries no date field, so the transaction
+is dated now (UTC). Once extracted, it follows the same persistence
+path as CreateTransaction.
 */
-func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, userID string, imageData []byte, date time.Time) (*domain.Transaction, error) {
+func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, userID string, imageData []byte) (*domain.Transaction, error) {
 	if len(imageData) == 0 {
 		return nil, domain.ErrEmptyImageData
 	}
@@ -150,22 +180,25 @@ func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, us
 	if err != nil {
 		return nil, err
 	}
-	if err := validateItems(items); err != nil {
+	description, err = normalizeInput(description, items)
+	if err != nil {
 		return nil, err
 	}
 
+	now := time.Now().UTC()
 	transaction := &domain.Transaction{
 		ID:          uuid.New().String(),
 		UserID:      userID,
 		Description: description,
-		Date:        date,
+		Date:        now,
 		Items:       items,
-		CreatedAt:   time.Now().UTC(),
-		Category:    uc.resolveCategory(ctx, description),
+		CreatedAt:   now,
 	}
 
-	assignItemIDs(transaction)
-	transaction.CalculateTotal()
+	if err := finalizeItems(transaction); err != nil {
+		return nil, err
+	}
+	transaction.Category = uc.resolveCategory(ctx, description)
 
 	if err := uc.transactionRepo.Create(ctx, transaction); err != nil {
 		return nil, err
@@ -213,16 +246,18 @@ func (uc *TransactionUsecase) UpdateTransaction(ctx context.Context, userID stri
 	if err != nil {
 		return nil, err
 	}
-	if err := validateItems(items); err != nil {
+	description, err = normalizeInput(description, items)
+	if err != nil {
 		return nil, err
 	}
 
 	transaction.Description = description
 	transaction.Date = date
 	transaction.Items = items
+	if err := finalizeItems(transaction); err != nil {
+		return nil, err
+	}
 	transaction.Category = uc.resolveCategory(ctx, description)
-	assignItemIDs(transaction)
-	transaction.CalculateTotal()
 
 	if err := uc.transactionRepo.Update(ctx, transaction); err != nil {
 		return nil, err

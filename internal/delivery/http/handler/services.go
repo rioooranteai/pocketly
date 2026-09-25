@@ -25,7 +25,7 @@ AuthService. usecase.TransactionUsecase satisfies it.
 */
 type TransactionService interface {
 	CreateTransaction(ctx context.Context, userID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error)
-	CreateTransactionFromImage(ctx context.Context, userID string, imageData []byte, date time.Time) (*domain.Transaction, error)
+	CreateTransactionFromImage(ctx context.Context, userID string, imageData []byte) (*domain.Transaction, error)
 	GetTransaction(ctx context.Context, userID string, transactionID string) (*domain.Transaction, error)
 	ListMyTransactions(ctx context.Context, userID string) ([]domain.Transaction, error)
 	UpdateTransaction(ctx context.Context, userID string, transactionID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error)

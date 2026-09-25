@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -57,7 +56,7 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 	// Sesuai signature Usecase: (ctx, userID, description, items, date)
 	transaction, err := h.transactionService.CreateTransaction(ctx, userID, req.Description, domainItems, req.Date)
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidItemData) {
+		if isInvalidItems(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -171,7 +170,7 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
-		if errors.Is(err, domain.ErrInvalidItemData) {
+		if isInvalidItems(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -222,8 +221,8 @@ func (h *TransactionHandler) Delete(c *gin.Context) {
 Scan handles POST requests to record a new transaction from a receipt
 image upload. It reads the uploaded file into memory, delegates
 extraction and creation to TransactionService, and responds the same
-way Create does. Date defaults to the current time since a scanned
-receipt has no explicit date field in the request. The route's
+way Create does. The transaction date is set by the usecase, since a
+scanned receipt has no date field in the request. The route's
 MaxBodySize middleware bounds how much is read; a body past that limit
 is answered with 413 Request Entity Too Large.
 */
@@ -262,7 +261,7 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	transaction, err := h.transactionService.CreateTransactionFromImage(ctx, userID, imageData, time.Now())
+	transaction, err := h.transactionService.CreateTransactionFromImage(ctx, userID, imageData)
 	if err != nil {
 		if errors.Is(err, domain.ErrEmptyImageData) || errors.Is(err, domain.ErrImageSizeExceedsLimit) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -270,11 +269,13 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 		}
 		/*
 			The client sent a valid image; it is the extracted data that
-			broke the item rules. 422 says the receipt could not be turned
-			into a valid transaction, rather than blaming the request.
+			broke the rules (no items, blank description, bad item). 422
+			says the receipt could not be turned into a valid transaction,
+			rather than blaming the request. Nothing was saved, so the
+			frontend can ask the user to retake the photo or type it in.
 		*/
-		if errors.Is(err, domain.ErrInvalidItemData) {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "receipt produced invalid item data: " + err.Error()})
+		if isInvalidItems(err) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "receipt could not be read as a valid transaction: " + err.Error()})
 			return
 		}
 		log.Printf("scan receipt failed: %v", err)
@@ -286,6 +287,18 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 		"message": "Transaction created successfully from receipt",
 		"data":    toTransactionResponse(transaction),
 	})
+}
+
+/*
+isInvalidItems reports whether err means the submitted or extracted
+data breaks the domain rules: a blank description, no items, a bad
+item, or a total too large to represent.
+*/
+func isInvalidItems(err error) bool {
+	return errors.Is(err, domain.ErrInvalidItemData) ||
+		errors.Is(err, domain.ErrTotalOutOfRange) ||
+		errors.Is(err, domain.ErrNoItems) ||
+		errors.Is(err, domain.ErrInvalidDescription)
 }
 
 /*

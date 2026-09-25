@@ -35,10 +35,28 @@ var (
 
 	/*
 		ErrInvalidItemData is returned when a transaction item fails
-		TransactionItem.ValidateItemData, i.e. it has a negative
-		quantity or price.
+		TransactionItem.ValidateItemData: its name is blank, or its
+		quantity or price is negative or out of range.
 	*/
-	ErrInvalidItemData = errors.New("item quantity and price must not be negative")
+	ErrInvalidItemData = errors.New("item needs a name and a non-negative quantity and price within range")
+
+	/*
+		ErrNoItems is returned when a transaction has no items, for
+		example when nothing could be read from a scanned receipt.
+	*/
+	ErrNoItems = errors.New("transaction must have at least one item")
+
+	/*
+		ErrInvalidDescription is returned when a transaction description
+		is empty or contains only whitespace.
+	*/
+	ErrInvalidDescription = errors.New("description must not be empty")
+
+	/*
+		ErrTotalOutOfRange is returned when a transaction's items are
+		each valid but their total is too large to represent.
+	*/
+	ErrTotalOutOfRange = errors.New("transaction total is too large")
 
 	/*
 		ErrTransactionNotFound is returned when a requested transaction
