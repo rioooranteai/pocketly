@@ -34,6 +34,13 @@ var (
 	ErrInvalidName = errors.New("name must not be empty")
 
 	/*
+		ErrInvalidItemData is returned when a transaction item fails
+		TransactionItem.ValidateItemData, i.e. it has a negative
+		quantity or price.
+	*/
+	ErrInvalidItemData = errors.New("item quantity and price must not be negative")
+
+	/*
 		ErrTransactionNotFound is returned when a requested transaction
 		does not exist.
 	*/

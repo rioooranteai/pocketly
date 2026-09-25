@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -76,6 +77,23 @@ func assignItemIDs(transaction *domain.Transaction) {
 }
 
 /*
+validateItems checks every item against the domain's item rules
+before anything is saved. It runs in the usecase rather than relying
+on DTO binding tags, because items reach this layer from more than
+one source: the HTTP body, and the vision extractor on /scan, whose
+output never passes through a DTO. The error names the 1-based item
+position so the caller can tell which one was rejected.
+*/
+func validateItems(items []domain.TransactionItem) error {
+	for i, item := range items {
+		if !item.ValidateItemData() {
+			return fmt.Errorf("item %d: %w", i+1, domain.ErrInvalidItemData)
+		}
+	}
+	return nil
+}
+
+/*
 CreateTransaction records a new transaction for the given user. The
 total amount is derived from the sum of its items rather than accepted
 directly, and the category is determined automatically via the
@@ -83,6 +101,10 @@ Categorizer based on the transaction's description. Categorization
 failures never block the transaction from being saved.
 */
 func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error) {
+	if err := validateItems(items); err != nil {
+		return nil, err
+	}
+
 	transaction := &domain.Transaction{
 		ID:          uuid.New().String(),
 		UserID:      userID,
@@ -114,6 +136,9 @@ fallback behavior on failure.
 func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, userID string, imageData []byte, date time.Time) (*domain.Transaction, error) {
 	description, items, err := uc.visionExtractor.Extract(ctx, imageData)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateItems(items); err != nil {
 		return nil, err
 	}
 
@@ -174,6 +199,9 @@ uncategorizedFallback instead of blocking the update.
 func (uc *TransactionUsecase) UpdateTransaction(ctx context.Context, userID string, transactionID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error) {
 	transaction, err := uc.GetTransaction(ctx, userID, transactionID)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateItems(items); err != nil {
 		return nil, err
 	}
 

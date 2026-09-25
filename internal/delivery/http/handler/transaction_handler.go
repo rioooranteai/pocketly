@@ -64,6 +64,10 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 	// Sesuai signature Usecase: (ctx, userID, description, items, date)
 	transaction, err := h.transactionUsecase.CreateTransaction(ctx, userID, req.Description, domainItems, req.Date)
 	if err != nil {
+		if errors.Is(err, domain.ErrInvalidItemData) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction"})
 		return
 	}
@@ -178,6 +182,10 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
+		if errors.Is(err, domain.ErrInvalidItemData) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update transaction"})
 		return
 	}
@@ -265,6 +273,15 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, domain.ErrEmptyImageData) || errors.Is(err, domain.ErrImageSizeExceedsLimit) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		/*
+			The client sent a valid image; it is the extracted data that
+			broke the item rules. 422 says the receipt could not be turned
+			into a valid transaction, rather than blaming the request.
+		*/
+		if errors.Is(err, domain.ErrInvalidItemData) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "receipt produced invalid item data: " + err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process receipt image"})
