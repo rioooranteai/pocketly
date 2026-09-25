@@ -44,16 +44,39 @@ func NewTransactionUsecase(transactionRepo repository.TransactionRepository, cat
 }
 
 /*
-resolveCategory determines the category for a transaction description
-via the Categorizer. If the Categorizer fails for any reason, it logs
+categorizationText builds the text a Categorizer sees: the description
+followed by every item name. The description alone is often just a
+merchant name (a scanned "Indomaret" says nothing about what was
+bought), while item names like "Paracetamol" or "Nasi goreng" carry
+the real signal, so both are sent. The labelled layout keeps it
+readable for LLM categorizers; keyword matching ignores the labels.
+*/
+func categorizationText(description string, items []domain.TransactionItem) string {
+	var b strings.Builder
+	b.WriteString("Description: ")
+	b.WriteString(description)
+	if len(items) > 0 {
+		b.WriteString("\nItems:")
+		for _, item := range items {
+			b.WriteString("\n- ")
+			b.WriteString(item.Name)
+		}
+	}
+	return b.String()
+}
+
+/*
+resolveCategory determines the category for a transaction from its
+description and item names (see categorizationText) via the
+Categorizer. If the Categorizer fails for any reason, it logs
 the error and falls back to domain.CategoryUncategorized instead of
 propagating the failure — categorization is a best-effort enrichment,
 not a precondition for saving a transaction. A category outside the
 domain list is treated the same way, so a misbehaving implementation
 can never store an unknown category.
 */
-func (uc *TransactionUsecase) resolveCategory(ctx context.Context, description string) string {
-	category, err := uc.categorizer.Categorize(ctx, description)
+func (uc *TransactionUsecase) resolveCategory(ctx context.Context, description string, items []domain.TransactionItem) string {
+	category, err := uc.categorizer.Categorize(ctx, categorizationText(description, items))
 	if err != nil {
 		log.Printf("categorizer failed, falling back to %q: %v", domain.CategoryUncategorized, err)
 		return domain.CategoryUncategorized
@@ -126,7 +149,7 @@ func normalizeInput(description string, items []domain.TransactionItem) (string,
 CreateTransaction records a new transaction for the given user. The
 total amount is derived from the sum of its items rather than accepted
 directly, and the category is determined automatically via the
-Categorizer based on the transaction's description. Categorization
+Categorizer based on the transaction's description and item names. Categorization
 failures never block the transaction from being saved.
 */
 func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error) {
@@ -147,7 +170,7 @@ func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID stri
 	if err := finalizeItems(transaction); err != nil {
 		return nil, err
 	}
-	transaction.Category = uc.resolveCategory(ctx, description)
+	transaction.Category = uc.resolveCategory(ctx, description, items)
 
 	if err := uc.transactionRepo.Create(ctx, transaction); err != nil {
 		return nil, err
@@ -198,7 +221,7 @@ func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, us
 	if err := finalizeItems(transaction); err != nil {
 		return nil, err
 	}
-	transaction.Category = uc.resolveCategory(ctx, description)
+	transaction.Category = uc.resolveCategory(ctx, description, items)
 
 	if err := uc.transactionRepo.Create(ctx, transaction); err != nil {
 		return nil, err
@@ -237,7 +260,7 @@ func (uc *TransactionUsecase) ListMyTransactions(ctx context.Context, userID str
 UpdateTransaction modifies an existing transaction owned by the given
 user. Ownership is verified via GetTransaction before any change is
 applied. The total amount is recalculated from the updated items, and
-the category is re-detected from the updated description. As with
+the category is re-detected from the updated description and items. As with
 CreateTransaction, a categorizer failure falls back to
 domain.CategoryUncategorized instead of blocking the update.
 */
@@ -257,7 +280,7 @@ func (uc *TransactionUsecase) UpdateTransaction(ctx context.Context, userID stri
 	if err := finalizeItems(transaction); err != nil {
 		return nil, err
 	}
-	transaction.Category = uc.resolveCategory(ctx, description)
+	transaction.Category = uc.resolveCategory(ctx, description, items)
 
 	if err := uc.transactionRepo.Update(ctx, transaction); err != nil {
 		return nil, err

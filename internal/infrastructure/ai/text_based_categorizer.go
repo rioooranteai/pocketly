@@ -11,7 +11,7 @@ import (
 
 /*
 TextBasedCategorizer implements port.Categorizer with keyword
-matching on the transaction description, without calling any external
+matching on the transaction text, without calling any external
 service. It is free, instant and deterministic, so it works as the
 default when no AI provider is configured, in local development and
 in tests, and for descriptions whose wording is already obvious.
@@ -30,7 +30,7 @@ func NewTextBasedCategorizer() *TextBasedCategorizer {
 
 /*
 categoryKeywords maps a category to lowercase keywords. A keyword
-matches when a word in the description starts with it, so "kopi" also
+matches when a word in the text starts with it, so "kopi" also
 matches "kopiku" but "tol" does not match "botol". A keyword with a
 space ("rumah sakit") matches that phrase at the start of a word.
 */
@@ -72,15 +72,16 @@ func normalizeText(text string) string {
 
 /*
 Categorize returns the first category, in domain.Categories order,
-that has a keyword matching the description. Walking the ordered
+that has a keyword matching the text (description and item
+names). Walking the ordered
 slice instead of the map keeps the result the same on every run, and
 because CategoryOthers is last a specific category always wins over
 it. It returns domain.CategoryUncategorized when nothing matches, and
 never returns an error since it has no external dependency that can
 fail.
 */
-func (t *TextBasedCategorizer) Categorize(ctx context.Context, description string) (string, error) {
-	normalized := normalizeText(description)
+func (t *TextBasedCategorizer) Categorize(ctx context.Context, text string) (string, error) {
+	normalized := normalizeText(text)
 
 	for _, category := range domain.Categories {
 		for _, kw := range categoryKeywords[category] {

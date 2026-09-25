@@ -33,7 +33,7 @@ type extractedCategory struct {
 
 /*
 OpenAICategorizer implements port.Categorizer using OpenAI's chat
-completion API. It sends the transaction description together with
+completion API. It sends the transaction text (description and item names) together with
 categorizerPrompt and expects a strict JSON response naming exactly
 one domain category.
 */
@@ -59,7 +59,8 @@ list here in sync with domain.Categories; Categorize rejects any
 answer outside that list anyway.
 */
 const categorizerPrompt = `You are a financial transaction classification system.
-Your task: categorize the given receipt/transaction description into EXACTLY ONE of the following categories:
+Your input is a transaction: a short description (often just the merchant name) followed by the purchased item names.
+Your task: categorize the whole transaction into EXACTLY ONE of the following categories, judging mainly by what was bought:
 
 - food: Food, drinks, restaurants, food stalls, coffee, grocery shopping
 - transportation: Gas/fuel, ride-hailing, taxi, parking, tolls, public transit tickets
@@ -79,15 +80,15 @@ Respond with ONLY valid JSON, no other text, no markdown code fences, matching e
 
 /*
 Categorize asks the model to pick one category for the given
-description. Technical failures (request error, no choices, malformed
+transaction text. Technical failures (request error, no choices, malformed
 JSON, a category outside domain.Categories) are returned as errors so
-the usecase logs them and falls back. An empty description is not a
+the usecase logs them and falls back. Empty text is not a
 failure, so it returns domain.CategoryUncategorized without calling
 the API. The whole call, retries included, is cut off after
 categorizerTimeout.
 */
-func (o *OpenAICategorizer) Categorize(ctx context.Context, description string) (string, error) {
-	if strings.TrimSpace(description) == "" {
+func (o *OpenAICategorizer) Categorize(ctx context.Context, text string) (string, error) {
+	if strings.TrimSpace(text) == "" {
 		return domain.CategoryUncategorized, nil
 	}
 
@@ -98,7 +99,7 @@ func (o *OpenAICategorizer) Categorize(ctx context.Context, description string) 
 		Model: openai.ChatModelGPT5_6Luna,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(categorizerPrompt),
-			openai.UserMessage(description),
+			openai.UserMessage(text),
 		},
 	})
 	if err != nil {

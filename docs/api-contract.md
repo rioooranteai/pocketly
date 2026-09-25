@@ -223,7 +223,7 @@ Nilai `category` selalu salah satu dari daftar berikut:
 | `others` | Lainnya: transaksi jelas yang tidak masuk kategori di atas (sewa kos, donasi, transfer, dll.) |
 | `uncategorized` | Kategori tidak bisa ditentukan (AI gagal, timeout, atau tidak yakin) |
 
-Kategori ditentukan dari `description` setiap kali transaksi dibuat atau diubah. `others` dan `uncategorized` berbeda: `others` adalah pilihan yang pasti, sedangkan `uncategorized` berarti kategori belum diketahui. Frontend sebaiknya punya tampilan untuk keduanya.
+Kategori ditentukan dari `description` **dan semua nama item** setiap kali transaksi dibuat atau diubah. `others` dan `uncategorized` berbeda: `others` adalah pilihan yang pasti, sedangkan `uncategorized` berarti kategori belum diketahui. Frontend sebaiknya punya tampilan untuk keduanya.
 
 ---
 
@@ -473,7 +473,7 @@ Content-Type: application/json
 
 | Field | Tipe | Wajib | Aturan |
 |---|---|---|---|
-| `description` | string | ✅ | Tidak boleh kosong atau hanya berisi spasi. Dipakai untuk menentukan kategori. |
+| `description` | string | ✅ | Tidak boleh kosong atau hanya berisi spasi. Dipakai bersama nama item untuk menentukan kategori. |
 | `date` | string | ✅ | RFC 3339 lengkap, contoh `"2026-09-25T12:30:00+07:00"` |
 | `items` | array | ✅ | Minimal 1 item |
 | `items[].name` | string | ✅ | Tidak boleh kosong atau hanya berisi spasi |
@@ -704,7 +704,7 @@ Mengganti isi transaksi. Body-nya **sama persis** dengan [POST /transactions](#5
 
 Hal yang perlu diperhatikan:
 - **Semua item diganti.** Item lama dihapus dan diganti dengan daftar `items` yang dikirim. Untuk mengubah satu item saja, kirim ulang seluruh daftar item.
-- **Kategori dihitung ulang** dari `description` yang baru.
+- **Kategori dihitung ulang** dari `description` dan item yang baru.
 - **`total_amount` dihitung ulang** dari item yang baru.
 
 **Request**

@@ -123,14 +123,14 @@ func NewTypeSafeCategorizer(apiKey string, baseUrl string, model string) *TypeSa
 
 /*
 Categorize asks Jev to pick one category from typeSafeCategoryCriteria
-for the given description. Technical failures (network, non-200
+for the given transaction text. Technical failures (network, non-200
 status, malformed or unexpected response) are returned as errors so
-the usecase logs them and falls back. An empty description or a
+the usecase logs them and falls back. Empty text or a
 low-confidence answer is not a failure, so it returns
 domain.CategoryUncategorized with no error.
 */
-func (t *TypeSafeCategorizer) Categorize(ctx context.Context, description string) (string, error) {
-	if strings.TrimSpace(description) == "" {
+func (t *TypeSafeCategorizer) Categorize(ctx context.Context, text string) (string, error) {
+	if strings.TrimSpace(text) == "" {
 		return domain.CategoryUncategorized, nil
 	}
 	if t.apyKey == "" {
@@ -138,7 +138,7 @@ func (t *TypeSafeCategorizer) Categorize(ctx context.Context, description string
 	}
 
 	body, err := json.Marshal(typeSafeRequest{
-		State: description,
+		State: text,
 		Model: t.model,
 		Questions: map[string]typeSafeQuestion{
 			typeSafeQuestionID: {
