@@ -36,7 +36,7 @@ func NewJWTSigner(secret string) (*JWTSigner, error) {
 
 	return &JWTSigner{
 		secret: []byte(secret),
-		ttl:    24 * time.Hour,
+		ttl:    12 * time.Hour,
 	}, nil
 }
 
