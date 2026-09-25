@@ -86,11 +86,11 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 
 	/*
 		Concrete implementation of port.Categorizer.
-		Currently a hardcoded stand-in — swap this for a real AI-backed
-		implementation (Claude, OpenAI, etc.) once one is built.
-		TransactionUsecase will not need any changes when that happens.
+		Currently keyword matching, which needs no API key. Swap this
+		for an AI-backed implementation (OpenAI, TypeSafe) when one
+		should be used; TransactionUsecase will not need any changes.
 	*/
-	categorizer := ai.NewDummyCategorizer()
+	categorizer := ai.NewTextBasedCategorizer()
 
 	/*
 		Concrete implementation of port.VisionExtractor, backed by

@@ -8,7 +8,7 @@ import (
 Categorizer is the contract for automatically determining a
 transaction's category from its description. The usecase layer
 depends only on this interface, so the underlying strategy (a simple
-keyword-matching dummy, or a real AI provider like TypeSafe/OpenAI/
+keyword-matching text-based one, or a real AI provider like TypeSafe/OpenAI/
 Gemini) can be swapped without touching business logic.
 */
 type Categorizer interface {

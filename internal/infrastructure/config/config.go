@@ -27,8 +27,8 @@ type Config struct {
 	/*
 		AIAPIKey is the API key for the AI categorizer (TypeSafe). It is
 		read now so the key is ready in the environment, but the
-		categorizer is not wired in Bootstrap yet; DummyCategorizer is
-		still in use and needs no key.
+		categorizer is not wired in Bootstrap yet; TextBasedCategorizer
+		is still in use and needs no key.
 	*/
 	AIAPIKey string
 
