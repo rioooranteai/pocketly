@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"pocketly/internal/domain"
+	"pocketly/internal/port"
 	"pocketly/internal/repository"
 )
 
@@ -20,15 +21,15 @@ can be swapped independently without touching this file.
 */
 type AuthUsecase struct {
 	userRepo repository.UserRepository
-	signer   repository.TokenSigner
-	hasher   repository.PasswordHasher
+	signer   port.TokenSigner
+	hasher   port.PasswordHasher
 }
 
 /*
 NewAuthUsecase builds an AuthUsecase backed by the given repository,
 token signer, and password hasher.
 */
-func NewAuthUsecase(userRepo repository.UserRepository, signer repository.TokenSigner, hasher repository.PasswordHasher) *AuthUsecase {
+func NewAuthUsecase(userRepo repository.UserRepository, signer port.TokenSigner, hasher port.PasswordHasher) *AuthUsecase {
 	return &AuthUsecase{userRepo: userRepo, signer: signer, hasher: hasher}
 }
 

@@ -11,14 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"pocketly/internal/repository"
+	"pocketly/internal/domain"
+	"pocketly/internal/port"
 )
 
 /*
 Defaults and tuning values for TypeSafeCategorizer. The base URL,
 model, and timeout mirror the defaults of TypeSafe's official SDKs.
 typeSafeMinConfidence is the lowest confidence accepted before the
-answer is treated as a guess and replaced with "uncategorized".
+answer is treated as a guess and replaced with
+domain.CategoryUncategorized.
 */
 const (
 	typeSafeDefaultBaseURL = "https://api.typesafe.ai"
@@ -26,23 +28,41 @@ const (
 	typeSafeTimeout        = 10 * time.Second
 	typeSafeMinConfidence  = 0.6
 	typeSafeQuestionID     = "category"
-	typeSafeUncategorized  = "uncategorized"
 	typeSafeErrorBodyLimit = 4096
 )
 
 /*
-typeSafeCategoryCriteria lists the categories Jev may choose from,
-each with a description the model uses to decide. The names match
-DummyCategorizer's so stored categories stay consistent whichever
-implementation is wired in.
+typeSafeCategoryDescriptions tells Jev what each domain category
+covers. It only holds descriptions; the set of categories itself comes
+from domain.Categories.
 */
-var typeSafeCategoryCriteria = map[string]string{
-	"food":           "Makanan, minuman, restoran, warung, kopi, belanja bahan dapur",
-	"transportation": "Bensin, ojek online, taksi, parkir, tol, tiket kendaraan umum",
-	"shopping":       "Belanja barang non-makanan: pakaian, elektronik, marketplace, mall",
-	"bills":          "Tagihan rutin: listrik, air, internet, pulsa, BPJS, cicilan",
-	"entertainment":  "Hiburan: bioskop, game, langganan streaming musik atau film",
-	"health":         "Kesehatan: apotek, obat, dokter, klinik, rumah sakit",
+var typeSafeCategoryDescriptions = map[string]string{
+	domain.CategoryFood:           "Makanan, minuman, restoran, warung, kopi, belanja bahan dapur",
+	domain.CategoryTransportation: "Bensin, ojek online, taksi, parkir, tol, tiket kendaraan umum",
+	domain.CategoryShopping:       "Belanja barang non-makanan: pakaian, elektronik, marketplace, mall",
+	domain.CategoryBills:          "Tagihan rutin: listrik, air, internet, pulsa, BPJS, cicilan",
+	domain.CategoryEntertainment:  "Hiburan: bioskop, game, langganan streaming musik atau film",
+	domain.CategoryHealth:         "Kesehatan: apotek, obat, dokter, klinik, rumah sakit",
+}
+
+/*
+typeSafeCategoryCriteria is the choice criteria sent to Jev: one entry
+per domain.Categories value. Building it from the domain list means a
+category added there is offered to Jev automatically; one without a
+description falls back to its own name.
+*/
+var typeSafeCategoryCriteria = buildTypeSafeCategoryCriteria()
+
+func buildTypeSafeCategoryCriteria() map[string]string {
+	criteria := make(map[string]string, len(domain.Categories))
+	for _, category := range domain.Categories {
+		description, ok := typeSafeCategoryDescriptions[category]
+		if !ok {
+			description = category
+		}
+		criteria[category] = description
+	}
+	return criteria
 }
 
 /*
@@ -82,7 +102,7 @@ type TypeSafeCategorizer struct {
 	model string
 }
 
-var _ repository.CategorizerRepository = (*TypeSafeCategorizer)(nil)
+var _ port.Categorizer = (*TypeSafeCategorizer)(nil)
 
 func NewTypeSafeCategorizer(apiKey string, baseUrl string, model string) *TypeSafeCategorizer {
 	if baseUrl == "" {
@@ -105,12 +125,12 @@ Categorize asks Jev to pick one category from typeSafeCategoryCriteria
 for the given description. Technical failures (network, non-200
 status, malformed or unexpected response) are returned as errors so
 the usecase logs them and falls back. An empty description or a
-low-confidence answer is not a failure, so it returns "uncategorized"
-with no error.
+low-confidence answer is not a failure, so it returns
+domain.CategoryUncategorized with no error.
 */
 func (t *TypeSafeCategorizer) Categorize(ctx context.Context, description string) (string, error) {
 	if strings.TrimSpace(description) == "" {
-		return typeSafeUncategorized, nil
+		return domain.CategoryUncategorized, nil
 	}
 	if t.apyKey == "" {
 		return "", errors.New("typesafe API key is not configured")
@@ -162,7 +182,7 @@ func (t *TypeSafeCategorizer) Categorize(ctx context.Context, description string
 		return "", fmt.Errorf("typesafe returned unknown category %q", answer.Choice)
 	}
 	if answer.Confidence < typeSafeMinConfidence {
-		return typeSafeUncategorized, nil
+		return domain.CategoryUncategorized, nil
 	}
 
 	return answer.Choice, nil

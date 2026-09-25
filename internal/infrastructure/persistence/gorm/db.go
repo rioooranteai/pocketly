@@ -6,8 +6,6 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-
-	"pocketly/internal/infrastructure/config"
 )
 
 /*
@@ -18,19 +16,19 @@ registered here.
 var models = []any{&UserModel{}, &TransactionModel{}, &TransactionItemModel{}}
 
 /*
-Connect opens a SQLite database connection using the path from Config.
+Connect opens a SQLite database connection at dbPath.
 It does not touch the schema — run Migrate (via cmd/migrate) for that,
 so schema changes are applied deliberately rather than on every
 server start. Foreign key enforcement is enabled through the DSN so it
 applies to every pooled connection; SQLite leaves it off by default,
 which would silently skip the ON DELETE CASCADE rules.
 */
-func Connect(cfg *config.Config) (*gorm.DB, error) {
+func Connect(dbPath string) (*gorm.DB, error) {
 	sep := "?"
-	if strings.Contains(cfg.DBPath, "?") {
+	if strings.Contains(dbPath, "?") {
 		sep = "&"
 	}
-	dsn := cfg.DBPath + sep + "_pragma=foreign_keys(1)"
+	dsn := dbPath + sep + "_pragma=foreign_keys(1)"
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{TranslateError: true})
 	if err != nil {

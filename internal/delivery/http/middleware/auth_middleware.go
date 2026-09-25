@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"pocketly/internal/repository"
+	"pocketly/internal/port"
 )
 
 /*
@@ -18,7 +18,7 @@ user ID in the request context under the key "userID" for downstream
 handlers to use. Requests with a missing, malformed, or invalid token
 are aborted with 401 Unauthorized before reaching any handler.
 */
-func AuthMiddleware(verifier repository.TokenVerifier) gin.HandlerFunc {
+func AuthMiddleware(verifier port.TokenVerifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {

@@ -8,6 +8,7 @@ import (
 	"pocketly/internal/infrastructure/auth"
 	"pocketly/internal/infrastructure/config"
 	persistence "pocketly/internal/infrastructure/persistence/gorm"
+	"pocketly/internal/port"
 	"pocketly/internal/usecase"
 )
 
@@ -19,7 +20,13 @@ free of construction details.
 type App struct {
 	AuthHandler        *handler.AuthHandler
 	TransactionHandler *handler.TransactionHandler
-	JWTSigner          *auth.JWTSigner
+
+	/*
+		TokenVerifier is what AuthMiddleware needs to check tokens. It is
+		typed as the port rather than *auth.JWTSigner so main.go and the
+		router never depend on the concrete JWT implementation.
+	*/
+	TokenVerifier port.TokenVerifier
 }
 
 /*
@@ -44,7 +51,7 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 	userRepository := persistence.NewGormUserRepository(db)
 
 	/*
-		Concrete implementation of repository.TokenSigner, backed by
+		Concrete implementation of port.TokenSigner, backed by
 		signed JWTs. To switch to a different auth strategy (e.g.
 		session tokens), replace this with a different implementation
 		of the same interface — AuthUsecase never needs to change.
@@ -55,7 +62,7 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 	}
 
 	/*
-		Concrete implementation of repository.PasswordHasher, backed by
+		Concrete implementation of port.PasswordHasher, backed by
 		Argon2id. To switch algorithms (e.g. to bcrypt), replace this
 		with a different implementation of the same interface —
 		AuthUsecase never needs to change.
@@ -78,7 +85,7 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 	*/
 
 	/*
-		Concrete implementation of repository.CategorizerRepository.
+		Concrete implementation of port.Categorizer.
 		Currently a hardcoded stand-in — swap this for a real AI-backed
 		implementation (Claude, OpenAI, etc.) once one is built.
 		TransactionUsecase will not need any changes when that happens.
@@ -86,11 +93,11 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 	categorizer := ai.NewDummyCategorizer()
 
 	/*
-		Concrete implementation of repository.VisionExtractor, backed by
+		Concrete implementation of port.VisionExtractor, backed by
 		OpenAI's vision-capable chat completion API. Extracts a
 		description and line items directly from a receipt image.
 	*/
-	visionExtractor := ai.NewOpenAIVisionExtractor(cfg.VisionConfig)
+	visionExtractor := ai.NewOpenAIVisionExtractor(cfg.VisionConfig.APIKey)
 
 	/*
 		Concrete implementation of repository.TransactionRepository,
@@ -103,7 +110,7 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 		transactions — including image-based creation via
 		visionExtractor. Depends only on the three interfaces above.
 	*/
-	transactionUsecase := usecase.NewTransactionUsecase(transactionRepository, categorizer, visionExtractor)
+	transactionUsecase := usecase.NewTransactionUsecase(transactionRepository, categorizer, visionExtractor, cfg.VisionConfig.MaxFileSize)
 
 	/*
 		HTTP layer for the /transactions endpoints, including
@@ -114,6 +121,6 @@ func Bootstrap(cfg *config.Config, db *gorm.DB) (*App, error) {
 	return &App{
 		AuthHandler:        authHandler,
 		TransactionHandler: transactionHandler,
-		JWTSigner:          jwtSigner,
+		TokenVerifier:      jwtSigner,
 	}, nil
 }

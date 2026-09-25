@@ -5,33 +5,36 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 
 	"pocketly/internal/domain"
-	"pocketly/internal/infrastructure/config"
+	"pocketly/internal/port"
 )
 
 /*
-OpenAIVisionExtractor implements repository.VisionExtractor using
+OpenAIVisionExtractor implements port.VisionExtractor using
 OpenAI's vision-capable chat completion API. It sends the receipt
 image as a base64 data URL alongside an instruction asking for a
 strict JSON response, then parses that JSON into domain entities.
 */
 type OpenAIVisionExtractor struct {
-	client      openai.Client
-	maxFileSize int64
+	client openai.Client
 }
 
+var _ port.VisionExtractor = (*OpenAIVisionExtractor)(nil)
+
 /*
-NewOpenAIVisionExtractor builds an OpenAIVisionExtractor using the
-given vision-specific configuration (API key and max upload size).
+NewOpenAIVisionExtractor builds an OpenAIVisionExtractor that
+authenticates with the given OpenAI API key. Upload size limits are
+not its concern; TransactionUsecase enforces them before calling
+Extract.
 */
-func NewOpenAIVisionExtractor(cfg config.VisionConfig) *OpenAIVisionExtractor {
-	client := openai.NewClient(option.WithAPIKey(cfg.APIKey))
-	return &OpenAIVisionExtractor{client: client, maxFileSize: cfg.MaxFileSize}
+func NewOpenAIVisionExtractor(apiKey string) *OpenAIVisionExtractor {
+	client := openai.NewClient(option.WithAPIKey(apiKey))
+	return &OpenAIVisionExtractor{client: client}
 }
 
 /*
@@ -73,22 +76,16 @@ no other text, no markdown code fences, matching exactly this shape:
 If a field cannot be determined, use a reasonable default (quantity 1, price 0).`
 
 /*
-Extract validates the image size, sends it to OpenAI's vision model
-along with visionPrompt, and parses the resulting JSON into a
-description and a list of domain.TransactionItem. Each item is
-assigned a fresh UUID; TransactionID is left empty since the caller
-(TransactionUsecase) assigns it once the parent transaction exists.
+Extract sends the image to OpenAI's vision model along with
+visionPrompt, and parses the resulting JSON into a description and a
+list of domain.TransactionItem. The data URL is labelled with the
+image's real type (PNG, JPEG, WebP, ...) sniffed from its bytes, since
+uploads are not always JPEG. Items are returned without ID or
+TransactionID; TransactionUsecase assigns both before saving.
 */
 func (o *OpenAIVisionExtractor) Extract(ctx context.Context, imageData []byte) (string, []domain.TransactionItem, error) {
-	if len(imageData) == 0 {
-		return "", nil, domain.ErrEmptyImageData
-	}
-	if int64(len(imageData)) > o.maxFileSize {
-		return "", nil, domain.ErrImageSizeExceedsLimit
-	}
-
 	encoded := base64.StdEncoding.EncodeToString(imageData)
-	dataURL := fmt.Sprintf("data:image/jpeg;base64,%s", encoded)
+	dataURL := fmt.Sprintf("data:%s;base64,%s", http.DetectContentType(imageData), encoded)
 
 	completion, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model: openai.ChatModelGPT5_6Luna,
@@ -119,7 +116,6 @@ func (o *OpenAIVisionExtractor) Extract(ctx context.Context, imageData []byte) (
 	items := make([]domain.TransactionItem, 0, len(parsed.Items))
 	for _, item := range parsed.Items {
 		items = append(items, domain.TransactionItem{
-			ID:       uuid.New().String(),
 			Name:     item.Name,
 			Quantity: item.Quantity,
 			Price:    item.Price,

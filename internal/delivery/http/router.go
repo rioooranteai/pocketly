@@ -7,7 +7,7 @@ import (
 
 	"pocketly/internal/delivery/http/handler"
 	"pocketly/internal/delivery/http/middleware"
-	"pocketly/internal/repository"
+	"pocketly/internal/port"
 )
 
 /*
@@ -16,6 +16,14 @@ valid payload is well under 1KB, so 4KB leaves room without letting
 a client stream megabytes into the JSON decoder.
 */
 const authBodyLimit = 4 * 1024
+
+/*
+transactionBodyLimit caps create and update transaction bodies. A
+receipt with a hundred line items is around 10KB of JSON, so 64KB is
+generous while still stopping a client from streaming a huge body
+into the JSON decoder.
+*/
+const transactionBodyLimit = 64 * 1024
 
 /*
 scanMultipartOverhead is added on top of the image size limit for
@@ -36,7 +44,7 @@ maxImageSize caps the receipt upload on /transactions/scan, so an
 oversized body is rejected while it is read instead of being buffered
 into memory first.
 */
-func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transactionHandler *handler.TransactionHandler, signer repository.TokenVerifier, maxImageSize int64) {
+func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transactionHandler *handler.TransactionHandler, signer port.TokenVerifier, maxImageSize int64) {
 	v1 := router.Group("/api/v1")
 
 	{
@@ -55,10 +63,10 @@ func SetupRoutes(router *gin.Engine, authHandler *handler.AuthHandler, transacti
 			is missing or invalid; otherwise it stores the authenticated
 			user's ID in the request context for the handler to read.
 		*/
-		v1.POST("/transactions", middleware.AuthMiddleware(signer), transactionHandler.Create)
+		v1.POST("/transactions", middleware.AuthMiddleware(signer), middleware.MaxBodySize(transactionBodyLimit), transactionHandler.Create)
 		v1.GET("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Get)
 		v1.GET("/transactions", middleware.AuthMiddleware(signer), transactionHandler.List)
-		v1.PUT("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Update)
+		v1.PUT("/transactions/:id", middleware.AuthMiddleware(signer), middleware.MaxBodySize(transactionBodyLimit), transactionHandler.Update)
 		v1.DELETE("/transactions/:id", middleware.AuthMiddleware(signer), transactionHandler.Delete)
 		v1.POST("/transactions/scan", middleware.AuthMiddleware(signer), middleware.MaxBodySize(maxImageSize+scanMultipartOverhead), transactionHandler.Scan)
 	}

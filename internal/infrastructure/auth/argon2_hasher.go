@@ -13,7 +13,7 @@ import (
 )
 
 /*
-Argon2Hasher implements repository.PasswordHasher using Argon2id, the
+Argon2Hasher implements port.PasswordHasher using Argon2id, the
 winner of the 2015 Password Hashing Competition. Unlike bcrypt, it is
 memory-hard, making GPU/ASIC-based brute-force attacks significantly
 more expensive.

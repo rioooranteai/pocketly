@@ -16,7 +16,7 @@ server boot.
 func main() {
 	cfg := config.Load()
 
-	db, err := persistence.Connect(cfg)
+	db, err := persistence.Connect(cfg.DBPath)
 	if err != nil {
 		log.Fatal(err)
 	}

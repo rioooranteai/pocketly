@@ -9,16 +9,9 @@ import (
 	"github.com/google/uuid"
 
 	"pocketly/internal/domain"
+	"pocketly/internal/port"
 	"pocketly/internal/repository"
 )
-
-/*
-uncategorizedFallback is used whenever the Categorizer fails to
-produce a category (e.g. AI provider outage, timeout, rate limit).
-Categorization is a secondary enrichment feature and must never
-block the core act of recording a transaction.
-*/
-const uncategorizedFallback = "uncategorized"
 
 /*
 TransactionUsecase implements the business logic for creating, reading,
@@ -29,34 +22,44 @@ and receipt image parsing to a VisionExtractor implementation.
 */
 type TransactionUsecase struct {
 	transactionRepo repository.TransactionRepository
-	categorizer     repository.CategorizerRepository
-	visionExtractor repository.VisionExtractor
+	categorizer     port.Categorizer
+	visionExtractor port.VisionExtractor
+	maxImageSize    int64
 }
 
 /*
 NewTransactionUsecase builds a TransactionUsecase backed by the given
-repository, categorizer, and vision extractor.
+repository, categorizer, and vision extractor. maxImageSize is the
+largest receipt image, in bytes, that CreateTransactionFromImage
+accepts.
 */
-func NewTransactionUsecase(transactionRepo repository.TransactionRepository, categorizer repository.CategorizerRepository, visionExtractor repository.VisionExtractor) *TransactionUsecase {
+func NewTransactionUsecase(transactionRepo repository.TransactionRepository, categorizer port.Categorizer, visionExtractor port.VisionExtractor, maxImageSize int64) *TransactionUsecase {
 	return &TransactionUsecase{
 		transactionRepo: transactionRepo,
 		categorizer:     categorizer,
 		visionExtractor: visionExtractor,
+		maxImageSize:    maxImageSize,
 	}
 }
 
 /*
 resolveCategory determines the category for a transaction description
 via the Categorizer. If the Categorizer fails for any reason, it logs
-the error and falls back to uncategorizedFallback instead of
+the error and falls back to domain.CategoryUncategorized instead of
 propagating the failure — categorization is a best-effort enrichment,
-not a precondition for saving a transaction.
+not a precondition for saving a transaction. A category outside the
+domain list is treated the same way, so a misbehaving implementation
+can never store an unknown category.
 */
 func (uc *TransactionUsecase) resolveCategory(ctx context.Context, description string) string {
 	category, err := uc.categorizer.Categorize(ctx, description)
 	if err != nil {
-		log.Printf("categorizer failed, falling back to %q: %v", uncategorizedFallback, err)
-		return uncategorizedFallback
+		log.Printf("categorizer failed, falling back to %q: %v", domain.CategoryUncategorized, err)
+		return domain.CategoryUncategorized
+	}
+	if !domain.IsValidCategory(category) {
+		log.Printf("categorizer returned unknown category %q, falling back to %q", category, domain.CategoryUncategorized)
+		return domain.CategoryUncategorized
 	}
 	return category
 }
@@ -128,12 +131,21 @@ func (uc *TransactionUsecase) CreateTransaction(ctx context.Context, userID stri
 /*
 CreateTransactionFromImage records a new transaction whose description
 and items are extracted from a receipt image via VisionExtractor,
-rather than typed in manually. Once extracted, it follows the same
-persistence path as CreateTransaction: total is recalculated from the
-extracted items, and category is resolved the same way, with the same
-fallback behavior on failure.
+rather than typed in manually. The image is checked for being empty
+or larger than maxImageSize before any provider is called, so the
+rule holds whichever VisionExtractor is wired in. Once extracted, it
+follows the same persistence path as CreateTransaction: total is
+recalculated from the extracted items, and category is resolved the
+same way, with the same fallback behavior on failure.
 */
 func (uc *TransactionUsecase) CreateTransactionFromImage(ctx context.Context, userID string, imageData []byte, date time.Time) (*domain.Transaction, error) {
+	if len(imageData) == 0 {
+		return nil, domain.ErrEmptyImageData
+	}
+	if int64(len(imageData)) > uc.maxImageSize {
+		return nil, domain.ErrImageSizeExceedsLimit
+	}
+
 	description, items, err := uc.visionExtractor.Extract(ctx, imageData)
 	if err != nil {
 		return nil, err
@@ -194,7 +206,7 @@ user. Ownership is verified via GetTransaction before any change is
 applied. The total amount is recalculated from the updated items, and
 the category is re-detected from the updated description. As with
 CreateTransaction, a categorizer failure falls back to
-uncategorizedFallback instead of blocking the update.
+domain.CategoryUncategorized instead of blocking the update.
 */
 func (uc *TransactionUsecase) UpdateTransaction(ctx context.Context, userID string, transactionID string, description string, items []domain.TransactionItem, date time.Time) (*domain.Transaction, error) {
 	transaction, err := uc.GetTransaction(ctx, userID, transactionID)

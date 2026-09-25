@@ -11,36 +11,36 @@ import (
 
 	"pocketly/internal/delivery/http/dto"
 	"pocketly/internal/domain"
-	"pocketly/internal/usecase"
 )
 
 /*
 TransactionHandler exposes financial transaction management endpoints over HTTP.
 It only handles request parsing, response formatting, and HTTP status codes — all
-business logic lives in TransactionUsecase.
+business logic lives behind TransactionService.
 */
 type TransactionHandler struct {
-	transactionUsecase *usecase.TransactionUsecase
+	transactionService TransactionService
 }
 
 /*
-NewTransactionHandler builds a TransactionHandler backed by the given TransactionUsecase.
+NewTransactionHandler builds a TransactionHandler backed by the given
+TransactionService, in practice usecase.TransactionUsecase.
 */
-func NewTransactionHandler(transactionUsecase *usecase.TransactionUsecase) *TransactionHandler {
-	return &TransactionHandler{transactionUsecase: transactionUsecase}
+func NewTransactionHandler(transactionService TransactionService) *TransactionHandler {
+	return &TransactionHandler{transactionService: transactionService}
 }
 
 /*
 Create handles POST requests to record a new financial transaction.
 It validates the incoming JSON body, converts DTO items to domain items,
-delegates creation to TransactionUsecase, and maps domain errors to the
+delegates creation to TransactionService, and maps domain errors to the
 appropriate HTTP status codes. On success it responds 201 Created with the
 newly created transaction data.
 */
 func (h *TransactionHandler) Create(c *gin.Context) {
 	var req dto.CreateTransactionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
+		respondBindError(c, err)
 		return
 	}
 
@@ -50,24 +50,18 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 		return
 	}
 
-	var domainItems []domain.TransactionItem
-	for _, item := range req.Items {
-		domainItems = append(domainItems, domain.TransactionItem{
-			Name:     item.Name,
-			Quantity: item.Quantity,
-			Price:    item.Price,
-		})
-	}
+	domainItems := toDomainItems(req.Items)
 
 	ctx := c.Request.Context()
 
 	// Sesuai signature Usecase: (ctx, userID, description, items, date)
-	transaction, err := h.transactionUsecase.CreateTransaction(ctx, userID, req.Description, domainItems, req.Date)
+	transaction, err := h.transactionService.CreateTransaction(ctx, userID, req.Description, domainItems, req.Date)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidItemData) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		log.Printf("create transaction failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction"})
 		return
 	}
@@ -81,7 +75,7 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 /*
 Get handles GET requests to retrieve a single transaction by its ID.
 It extracts the ID from path parameters, delegates retrieval to
-TransactionUsecase, and responds 404 Not Found when the transaction does
+TransactionService, and responds 404 Not Found when the transaction does
 not exist or belongs to another user (see isTransactionNotFound). On
 success it responds 200 OK with the requested transaction.
 */
@@ -95,13 +89,14 @@ func (h *TransactionHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	ctx := c.Request.Context()
 
-	transaction, err := h.transactionUsecase.GetTransaction(ctx, userID, id)
+	transaction, err := h.transactionService.GetTransaction(ctx, userID, id)
 	if err != nil {
 		if isTransactionNotFound(err) {
 			logUnauthorizedAccess(c, err, userID, id)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
+		log.Printf("get transaction failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transaction"})
 		return
 	}
@@ -113,7 +108,7 @@ func (h *TransactionHandler) Get(c *gin.Context) {
 
 /*
 List handles GET requests to fetch all transactions belonging to the authenticated user.
-It delegates retrieval to TransactionUsecase and maps internal errors to 500 Internal
+It delegates retrieval to TransactionService and maps internal errors to 500 Internal
 Server Error. On success it responds 200 OK with a list of user transactions.
 */
 func (h *TransactionHandler) List(c *gin.Context) {
@@ -125,8 +120,9 @@ func (h *TransactionHandler) List(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	transactions, err := h.transactionUsecase.ListMyTransactions(ctx, userID)
+	transactions, err := h.transactionService.ListMyTransactions(ctx, userID)
 	if err != nil {
+		log.Printf("list transactions failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
 		return
 	}
@@ -144,7 +140,7 @@ func (h *TransactionHandler) List(c *gin.Context) {
 /*
 Update handles PUT requests to modify an existing transaction.
 It validates the incoming JSON body, converts DTO items to domain items,
-delegates update execution to TransactionUsecase, and responds 404 Not Found when
+delegates update execution to TransactionService, and responds 404 Not Found when
 the transaction does not exist or belongs to another user (see
 isTransactionNotFound). On success it responds 200 OK with the updated transaction details.
 */
@@ -159,23 +155,16 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 
 	var req dto.CreateTransactionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
+		respondBindError(c, err)
 		return
 	}
 
-	var domainItems []domain.TransactionItem
-	for _, item := range req.Items {
-		domainItems = append(domainItems, domain.TransactionItem{
-			Name:     item.Name,
-			Quantity: item.Quantity,
-			Price:    item.Price,
-		})
-	}
+	domainItems := toDomainItems(req.Items)
 
 	ctx := c.Request.Context()
 
 	// Sesuai signature Usecase: (ctx, userID, transactionID, description, items, date)
-	transaction, err := h.transactionUsecase.UpdateTransaction(ctx, userID, id, req.Description, domainItems, req.Date)
+	transaction, err := h.transactionService.UpdateTransaction(ctx, userID, id, req.Description, domainItems, req.Date)
 	if err != nil {
 		if isTransactionNotFound(err) {
 			logUnauthorizedAccess(c, err, userID, id)
@@ -186,6 +175,7 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		log.Printf("update transaction failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update transaction"})
 		return
 	}
@@ -199,7 +189,7 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 /*
 Delete handles DELETE requests to remove a transaction by its ID.
 It extracts the transaction ID from path parameters, delegates deletion to
-TransactionUsecase, and responds 404 Not Found when the transaction does not
+TransactionService, and responds 404 Not Found when the transaction does not
 exist or belongs to another user (see isTransactionNotFound). On success
 it responds 204 No Content with an empty response body.
 */
@@ -213,13 +203,14 @@ func (h *TransactionHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	ctx := c.Request.Context()
 
-	err := h.transactionUsecase.DeleteTransaction(ctx, userID, id)
+	err := h.transactionService.DeleteTransaction(ctx, userID, id)
 	if err != nil {
 		if isTransactionNotFound(err) {
 			logUnauthorizedAccess(c, err, userID, id)
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
+		log.Printf("delete transaction failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete transaction"})
 		return
 	}
@@ -230,7 +221,7 @@ func (h *TransactionHandler) Delete(c *gin.Context) {
 /*
 Scan handles POST requests to record a new transaction from a receipt
 image upload. It reads the uploaded file into memory, delegates
-extraction and creation to TransactionUsecase, and responds the same
+extraction and creation to TransactionService, and responds the same
 way Create does. Date defaults to the current time since a scanned
 receipt has no explicit date field in the request. The route's
 MaxBodySize middleware bounds how much is read; a body past that limit
@@ -256,6 +247,7 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 
 	file, err := fileHeader.Open()
 	if err != nil {
+		log.Printf("open uploaded receipt failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open uploaded file"})
 		return
 	}
@@ -263,13 +255,14 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 
 	imageData, err := io.ReadAll(file)
 	if err != nil {
+		log.Printf("read uploaded receipt failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read uploaded file"})
 		return
 	}
 
 	ctx := c.Request.Context()
 
-	transaction, err := h.transactionUsecase.CreateTransactionFromImage(ctx, userID, imageData, time.Now())
+	transaction, err := h.transactionService.CreateTransactionFromImage(ctx, userID, imageData, time.Now())
 	if err != nil {
 		if errors.Is(err, domain.ErrEmptyImageData) || errors.Is(err, domain.ErrImageSizeExceedsLimit) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -284,6 +277,7 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "receipt produced invalid item data: " + err.Error()})
 			return
 		}
+		log.Printf("scan receipt failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process receipt image"})
 		return
 	}
@@ -321,6 +315,24 @@ func logUnauthorizedAccess(c *gin.Context, err error, userID, transactionID stri
 }
 
 // --- Helper Conversion ---
+
+/*
+toDomainItems converts request items into domain items. Quantity and
+Price are pointers in the DTO so that 0 is accepted while a missing
+field is still rejected; binding has already guaranteed they are set.
+IDs are left empty for TransactionUsecase to assign.
+*/
+func toDomainItems(reqItems []dto.TransactionItemRequest) []domain.TransactionItem {
+	items := make([]domain.TransactionItem, 0, len(reqItems))
+	for _, item := range reqItems {
+		items = append(items, domain.TransactionItem{
+			Name:     item.Name,
+			Quantity: *item.Quantity,
+			Price:    *item.Price,
+		})
+	}
+	return items
+}
 
 func toTransactionResponse(t *domain.Transaction) dto.TransactionResponse {
 	if t == nil {

@@ -38,7 +38,7 @@ database before exiting.
 func main() {
 	cfg := config.Load()
 
-	db, err := persistence.Connect(cfg)
+	db, err := persistence.Connect(cfg.DBPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	router.SetupRoutes(r, app.AuthHandler, app.TransactionHandler, app.JWTSigner, cfg.VisionConfig.MaxFileSize)
+	router.SetupRoutes(r, app.AuthHandler, app.TransactionHandler, app.TokenVerifier, cfg.VisionConfig.MaxFileSize)
 
 	/*
 		ReadHeaderTimeout stops slow clients from holding connections

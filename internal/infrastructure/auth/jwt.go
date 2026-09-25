@@ -9,7 +9,7 @@ import (
 )
 
 /*
-JWTSigner implements repository.TokenSigner using signed JWTs.
+JWTSigner implements port.TokenSigner using signed JWTs.
 Tokens are signed with HS256 and expire after ttl.
 */
 type JWTSigner struct {
