@@ -20,12 +20,17 @@ at startup: server port, database location, JWT signing secret, and
 AI provider credentials.
 */
 type Config struct {
-	AppPort      string
-	DBPath       string
-	JWTSecret    string
-	AIProvider   string
-	AIAPIKey     string
-	VisionAPIKey string
+	AppPort   string
+	DBPath    string
+	JWTSecret string
+
+	/*
+		AIAPIKey is the API key for the AI categorizer (TypeSafe). It is
+		read now so the key is ready in the environment, but the
+		categorizer is not wired in Bootstrap yet; DummyCategorizer is
+		still in use and needs no key.
+	*/
+	AIAPIKey string
 
 	/*
 		TrustedProxies lists the proxy IPs/CIDRs allowed to set
@@ -38,6 +43,10 @@ type Config struct {
 	VisionConfig VisionConfig
 }
 
+/*
+VisionConfig holds the settings for receipt scanning: the vision
+provider's API key and the largest image, in bytes, the app accepts.
+*/
 type VisionConfig struct {
 	APIKey      string
 	MaxFileSize int64
@@ -63,7 +72,6 @@ func Load() *Config {
 		AppPort:        os.Getenv("APP_PORT"),
 		DBPath:         os.Getenv("DB_PATH"),
 		JWTSecret:      os.Getenv("JWT_SECRET"),
-		AIProvider:     os.Getenv("AI_PROVIDER"),
 		AIAPIKey:       os.Getenv("AI_API_KEY"),
 		TrustedProxies: trustedProxies,
 

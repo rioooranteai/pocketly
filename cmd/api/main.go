@@ -11,8 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	router "pocketly/internal/delivery/http"
 	"pocketly/internal/delivery/http/middleware"
+	"pocketly/internal/delivery/http/router"
 	"pocketly/internal/infrastructure/config"
 	persistence "pocketly/internal/infrastructure/persistence/gorm"
 )
