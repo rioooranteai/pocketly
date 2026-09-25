@@ -4,31 +4,60 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 
+	"pocketly/internal/domain"
 	"pocketly/internal/port"
 )
 
+/*
+categorizerTimeout bounds one Categorize call, including the SDK's
+automatic retries. The OpenAI client has no request timeout by
+default, so without this a hung provider would hold the request open
+for as long as the client waits.
+*/
 const categorizerTimeout = 25 * time.Second
 
+/*
+extractedCategory is the intermediate shape used to unmarshal the
+model's JSON response before the category is validated against the
+domain list.
+*/
 type extractedCategory struct {
 	Category string `json:"category"`
 }
 
+/*
+OpenAICategorizer implements port.Categorizer using OpenAI's chat
+completion API. It sends the transaction description together with
+categorizerPrompt and expects a strict JSON response naming exactly
+one domain category.
+*/
 type OpenAICategorizer struct {
 	client openai.Client
 }
 
 var _ port.Categorizer = (*OpenAICategorizer)(nil)
 
-func NewOpenAICategorizer(apiKey string) *OpenAIVisionExtractor {
+/*
+NewOpenAICategorizer builds an OpenAICategorizer that authenticates
+with the given OpenAI API key.
+*/
+func NewOpenAICategorizer(apiKey string) *OpenAICategorizer {
 	client := openai.NewClient(option.WithAPIKey(apiKey))
-	return &OpenAIVisionExtractor{client: client}
+	return &OpenAICategorizer{client: client}
 }
 
+/*
+categorizerPrompt is the system prompt that restricts the model to
+the categories in domain.Categories and asks for JSON only. Keep the
+list here in sync with domain.Categories; Categorize rejects any
+answer outside that list anyway.
+*/
 const categorizerPrompt = `You are a financial transaction classification system.
 Your task: categorize the given receipt/transaction description into EXACTLY ONE of the following categories:
 
@@ -47,8 +76,21 @@ Respond with ONLY valid JSON, no other text, no markdown code fences, matching e
   "category": "one of: food, transportation, shopping, bills, entertainment, health"
 }`
 
+/*
+Categorize asks the model to pick one category for the given
+description. Technical failures (request error, no choices, malformed
+JSON, a category outside domain.Categories) are returned as errors so
+the usecase logs them and falls back. An empty description is not a
+failure, so it returns domain.CategoryUncategorized without calling
+the API. The whole call, retries included, is cut off after
+categorizerTimeout.
+*/
 func (o *OpenAICategorizer) Categorize(ctx context.Context, description string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, visionTimeout)
+	if strings.TrimSpace(description) == "" {
+		return domain.CategoryUncategorized, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, categorizerTimeout)
 	defer cancel()
 
 	completion, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
@@ -58,21 +100,30 @@ func (o *OpenAICategorizer) Categorize(ctx context.Context, description string) 
 			openai.UserMessage(description),
 		},
 	})
-
 	if err != nil {
-		return "", fmt.Errorf("openai request failed: %w", err)
+		return "", fmt.Errorf("openai categorize request failed: %w", err)
 	}
 
 	if len(completion.Choices) == 0 {
-		return "", fmt.Errorf("openai returned no category")
+		return "", fmt.Errorf("openai categorize returned no choices")
 	}
 
 	rawContent := completion.Choices[0].Message.Content
 
 	var parsed extractedCategory
 	if err := json.Unmarshal([]byte(rawContent), &parsed); err != nil {
-		return "", fmt.Errorf("failed to parse llm response as JSON: %w", err)
+		return "", fmt.Errorf("failed to parse categorize response as JSON: %w", err)
 	}
 
-	return parsed.Category, nil
+	/*
+		The model may answer with different casing or stray whitespace,
+		or invent a category. Normalize first, then accept only a value
+		from domain.Categories; "uncategorized" is a fallback, not a pick.
+	*/
+	category := strings.ToLower(strings.TrimSpace(parsed.Category))
+	if category == domain.CategoryUncategorized || !domain.IsValidCategory(category) {
+		return "", fmt.Errorf("openai returned unknown category %q", parsed.Category)
+	}
+
+	return category, nil
 }
