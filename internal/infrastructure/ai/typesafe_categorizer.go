@@ -43,6 +43,7 @@ var typeSafeCategoryDescriptions = map[string]string{
 	domain.CategoryBills:          "Tagihan rutin: listrik, air, internet, pulsa, BPJS, cicilan",
 	domain.CategoryEntertainment:  "Hiburan: bioskop, game, langganan streaming musik atau film",
 	domain.CategoryHealth:         "Kesehatan: apotek, obat, dokter, klinik, rumah sakit",
+	domain.CategoryOthers:         "Lainnya: transaksi jelas yang tidak masuk kategori lain, seperti sewa kos, donasi, transfer ke orang, biaya pendidikan",
 }
 
 /*

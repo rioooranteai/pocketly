@@ -67,13 +67,14 @@ Your task: categorize the given receipt/transaction description into EXACTLY ONE
 - bills: Recurring bills: electricity, water, internet, phone credit, BPJS, installments
 - entertainment: Entertainment: cinema, games, music or video streaming subscriptions
 - health: Health: pharmacy, medicine, doctor, clinic, hospital
+- others: A clear transaction that fits none of the above: rent, donations, transfers to people, education fees
 
-If the description doesn't clearly match any category, choose the closest one based on general context.
+Pick a specific category whenever it reasonably fits. Use "others" only when none of the specific categories applies.
 
 Respond with ONLY valid JSON, no other text, no markdown code fences, matching exactly this shape:
 
 {
-  "category": "one of: food, transportation, shopping, bills, entertainment, health"
+  "category": "one of: food, transportation, shopping, bills, entertainment, health, others"
 }`
 
 /*

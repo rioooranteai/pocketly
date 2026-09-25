@@ -16,6 +16,15 @@ const (
 	CategoryHealth         = "health"
 
 	/*
+		CategoryOthers is a real pick: the categorizer understood the
+		transaction and it fits none of the categories above (rent,
+		donations, transfers, ...). It differs from
+		CategoryUncategorized, which means no category could be
+		determined at all.
+	*/
+	CategoryOthers = "others"
+
+	/*
 		CategoryUncategorized is used when no category could be
 		determined: nothing matched, the categorizer was unsure, or it
 		failed. It is valid to store but is never a categorizer's pick.
@@ -35,6 +44,7 @@ var Categories = []string{
 	CategoryBills,
 	CategoryEntertainment,
 	CategoryHealth,
+	CategoryOthers,
 }
 
 /*

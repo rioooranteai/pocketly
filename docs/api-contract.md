@@ -220,9 +220,10 @@ Nilai `category` selalu salah satu dari daftar berikut:
 | `bills` | Tagihan |
 | `entertainment` | Hiburan |
 | `health` | Kesehatan |
-| `uncategorized` | Kategori tidak bisa ditentukan |
+| `others` | Lainnya: transaksi jelas yang tidak masuk kategori di atas (sewa kos, donasi, transfer, dll.) |
+| `uncategorized` | Kategori tidak bisa ditentukan (AI gagal, timeout, atau tidak yakin) |
 
-Kategori ditentukan dari `description` setiap kali transaksi dibuat atau diubah. Frontend sebaiknya punya tampilan untuk `uncategorized`.
+Kategori ditentukan dari `description` setiap kali transaksi dibuat atau diubah. `others` dan `uncategorized` berbeda: `others` adalah pilihan yang pasti, sedangkan `uncategorized` berarti kategori belum diketahui. Frontend sebaiknya punya tampilan untuk keduanya.
 
 ---
 

@@ -40,6 +40,7 @@ var categoryKeywords = map[string][]string{
 	domain.CategoryBills:          {"listrik", "pulsa", "wifi", "internet", "pdam", "bpjs"},
 	domain.CategoryEntertainment:  {"nonton", "bioskop", "netflix", "spotify", "game"},
 	domain.CategoryHealth:         {"apotek", "obat", "dokter", "rumah sakit", "klinik"},
+	domain.CategoryOthers:         {"kost", "sewa", "donasi", "zakat", "sedekah", "transfer", "sekolah", "kuliah"},
 }
 
 /*
