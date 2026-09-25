@@ -76,8 +76,9 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 /*
 Get handles GET requests to retrieve a single transaction by its ID.
 It extracts the ID from path parameters, delegates retrieval to
-TransactionUsecase, and maps domain errors like ErrTransactionNotFound to 404
-Not Found. On success it responds 200 OK with the requested transaction.
+TransactionUsecase, and responds 404 Not Found when the transaction does
+not exist or belongs to another user (see isTransactionNotFound). On
+success it responds 200 OK with the requested transaction.
 */
 func (h *TransactionHandler) Get(c *gin.Context) {
 	userID := c.GetString("userID")
@@ -91,7 +92,7 @@ func (h *TransactionHandler) Get(c *gin.Context) {
 
 	transaction, err := h.transactionUsecase.GetTransaction(ctx, userID, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrTransactionNotFound) {
+		if isTransactionNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
@@ -137,8 +138,9 @@ func (h *TransactionHandler) List(c *gin.Context) {
 /*
 Update handles PUT requests to modify an existing transaction.
 It validates the incoming JSON body, converts DTO items to domain items,
-delegates update execution to TransactionUsecase, and maps ErrTransactionNotFound
-to 404 Not Found. On success it responds 200 OK with the updated transaction details.
+delegates update execution to TransactionUsecase, and responds 404 Not Found when
+the transaction does not exist or belongs to another user (see
+isTransactionNotFound). On success it responds 200 OK with the updated transaction details.
 */
 func (h *TransactionHandler) Update(c *gin.Context) {
 	userID := c.GetString("userID")
@@ -169,7 +171,7 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 	// Sesuai signature Usecase: (ctx, userID, transactionID, description, items, date)
 	transaction, err := h.transactionUsecase.UpdateTransaction(ctx, userID, id, req.Description, domainItems, req.Date)
 	if err != nil {
-		if errors.Is(err, domain.ErrTransactionNotFound) {
+		if isTransactionNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
@@ -186,7 +188,8 @@ func (h *TransactionHandler) Update(c *gin.Context) {
 /*
 Delete handles DELETE requests to remove a transaction by its ID.
 It extracts the transaction ID from path parameters, delegates deletion to
-TransactionUsecase, and maps ErrTransactionNotFound to 404 Not Found. On success
+TransactionUsecase, and responds 404 Not Found when the transaction does not
+exist or belongs to another user (see isTransactionNotFound). On success
 it responds 204 No Content with an empty response body.
 */
 func (h *TransactionHandler) Delete(c *gin.Context) {
@@ -201,7 +204,7 @@ func (h *TransactionHandler) Delete(c *gin.Context) {
 
 	err := h.transactionUsecase.DeleteTransaction(ctx, userID, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrTransactionNotFound) {
+		if isTransactionNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
 			return
 		}
@@ -261,6 +264,17 @@ func (h *TransactionHandler) Scan(c *gin.Context) {
 		"message": "Transaction created successfully from receipt",
 		"data":    toTransactionResponse(transaction),
 	})
+}
+
+/*
+isTransactionNotFound reports whether err should be answered with
+404 Not Found. A transaction owned by someone else is reported the
+same way as one that does not exist, so a client cannot probe IDs to
+learn which transactions exist. The usecase still returns the two
+errors separately; hiding the difference is an HTTP concern.
+*/
+func isTransactionNotFound(err error) bool {
+	return errors.Is(err, domain.ErrTransactionNotFound) || errors.Is(err, domain.ErrUnauthorizedAccess)
 }
 
 // --- Helper Conversion ---
